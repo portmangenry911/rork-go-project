@@ -17,15 +17,42 @@ import ChatThread from "@/components/ChatThread";
 import { colors, fonts, radius, softShadow } from "@/constants/theme";
 import { getOrCreateConversation } from "@/hooks/useChat";
 import { usePatientHome } from "@/hooks/usePatientHome";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
+import type { RelationWithDoctor } from "@/types/db";
 
 export default function PatientChatScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { userId } = useAuth();
-  const { profile, relation, isLoading } = usePatientHome();
+  const { profile, isLoading } = usePatientHome();
 
-  const doctor = relation?.doctor ?? null;
+  // Direct, independent lookup of the doctor relation — deliberately not
+  // routed through usePatientHome's relationQuery, which depends on that
+  // hook's own patientId resolution/cache and was returning stale/empty
+  // results here even when the DB relation was active.
+  const relationQuery = useQuery({
+    queryKey: ["direct-relation", userId],
+    enabled: !!userId,
+    queryFn: async (): Promise<RelationWithDoctor | null> => {
+      const profileResult = await supabase
+        .from("patient_profiles")
+        .select("id")
+        .eq("user_id", userId as string)
+        .single();
+      const patientId = profileResult.data?.id;
+      if (!patientId) return null;
+      const { data } = await supabase
+        .from("doctor_patient_relations")
+        .select("id, status, doctor:doctor_profiles(id, first_name, last_name)")
+        .eq("patient_id", patientId)
+        .eq("status", "active")
+        .maybeSingle();
+      return data as unknown as RelationWithDoctor | null;
+    },
+  });
+
+  const doctor = relationQuery.data?.doctor ?? null;
   const patientProfileId = profile?.id ?? null;
 
   const conversationQuery = useQuery({
@@ -38,7 +65,7 @@ export default function PatientChatScreen() {
       ),
   });
 
-  if (isLoading) {
+  if (isLoading || relationQuery.isLoading) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={colors.navy} />
