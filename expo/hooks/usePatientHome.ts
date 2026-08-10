@@ -25,7 +25,7 @@ export function usePatientHome() {
   });
   const patientId = profileQuery.data?.id ?? null;
   const relationQuery = useQuery({
-    queryKey: ["patient-doctor-relation", patientId],
+    queryKey: ["patient-doctor-relation", patientId, userId],
     enabled: patientId !== null,
     queryFn: async (): Promise<RelationWithDoctor | null> => {
       const { data, error } = await supabase
