@@ -65,8 +65,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         password,
       });
       if (error) throw error;
+      queryClient.clear();
     },
-    [],
+    [queryClient],
   );
 
   const signUp = useCallback(
