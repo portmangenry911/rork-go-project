@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
@@ -23,41 +22,13 @@ import AvatarInitials from "@/components/AvatarInitials";
 import ProgressRing from "@/components/ProgressRing";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { usePatientHome } from "@/hooks/usePatientHome";
-import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/providers/AuthProvider";
-import type { RelationWithDoctor } from "@/types/db";
 import { formatKg } from "@/utils/format";
 
 export default function PatientHomeScreen() {
   const insets = useSafeAreaInsets();
-  const { userId } = useAuth();
-  const { profile, cycle, latestCheckin, isLoading } = usePatientHome();
+  const { profile, relation, cycle, latestCheckin, isLoading } = usePatientHome();
 
-  // Direct, independent lookup of the doctor relation — same fix as in
-  // chat.tsx / profile.tsx. Not routed through usePatientHome's own
-  // relationQuery, which was returning stale/empty results here.
-  const relationQuery = useQuery({
-    queryKey: ["direct-relation", userId],
-    enabled: !!userId,
-    queryFn: async (): Promise<RelationWithDoctor | null> => {
-      const profileResult = await supabase
-        .from("patient_profiles")
-        .select("id")
-        .eq("user_id", userId as string)
-        .single();
-      const patientId = profileResult.data?.id;
-      if (!patientId) return null;
-      const { data } = await supabase
-        .from("doctor_patient_relations")
-        .select("id, status, doctor:doctor_profiles(id, first_name, last_name)")
-        .eq("patient_id", patientId)
-        .eq("status", "active")
-        .maybeSingle();
-      return data as unknown as RelationWithDoctor | null;
-    },
-  });
-
-  if (isLoading || relationQuery.isLoading) {
+  if (isLoading) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={colors.navy} />
@@ -66,9 +37,8 @@ export default function PatientHomeScreen() {
   }
 
   const doctorName =
-    relationQuery.data?.doctor !== null &&
-    relationQuery.data?.doctor !== undefined
-      ? `${relationQuery.data.doctor.first_name} ${relationQuery.data.doctor.last_name}`
+    relation?.doctor !== null && relation?.doctor !== undefined
+      ? `${relation.doctor.first_name} ${relation.doctor.last_name}`
       : null;
 
   const hasActiveCycle = cycle !== null;

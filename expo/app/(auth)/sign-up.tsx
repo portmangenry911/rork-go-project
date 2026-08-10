@@ -63,7 +63,6 @@ export default function SignUpScreen() {
   const [firstName, setFirstName] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
   const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
-  const [draftDob, setDraftDob] = useState<Date | null>(null);
   const [dobText, setDobText] = useState<string>("");
   const [showDobPicker, setShowDobPicker] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -227,10 +226,7 @@ export default function SignUpScreen() {
                 <Pressable
                   testID="sign-up-dob"
                   style={styles.dateField}
-                  onPress={() => {
-                    setDraftDob(dateOfBirth);
-                    setShowDobPicker((prev) => !prev);
-                  }}
+                  onPress={() => setShowDobPicker((prev) => !prev)}
                 >
                   <Text
                     style={[
@@ -246,41 +242,20 @@ export default function SignUpScreen() {
                 </Pressable>
               )}
               {showDobPicker && Platform.OS !== "web" && (
-                <View style={styles.pickerPanel}>
-                  <DateTimePicker
-                    value={draftDob ?? dateOfBirth ?? new Date(2000, 0, 1)}
-                    mode="date"
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    maximumDate={new Date()}
-                    onChange={(event: DateTimePickerEvent, selected?: Date) => {
-                      if (Platform.OS === "android") {
-                        setShowDobPicker(false);
-                        if (event.type !== "dismissed" && selected !== undefined) {
-                          setDateOfBirth(selected);
-                        }
-                        return;
-                      }
-                      if (event.type !== "dismissed" && selected !== undefined) {
-                        setDraftDob(selected);
-                      }
-                    }}
-                  />
-                  {Platform.OS === "ios" && (
-                    <Pressable
-                      testID="sign-up-dob-done"
-                      style={styles.pickerDoneButton}
-                      onPress={() => {
-                        if (draftDob !== null) {
-                          setDateOfBirth(draftDob);
-                        }
-                        setDraftDob(null);
-                        setShowDobPicker(false);
-                      }}
-                    >
-                      <Text style={styles.pickerDoneText}>Готово</Text>
-                    </Pressable>
-                  )}
-                </View>
+                <DateTimePicker
+                  value={dateOfBirth ?? new Date(2000, 0, 1)}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  maximumDate={new Date()}
+                  onChange={(event: DateTimePickerEvent, selected?: Date) => {
+                    if (Platform.OS === "android") {
+                      setShowDobPicker(false);
+                    }
+                    if (event.type !== "dismissed" && selected !== undefined) {
+                      setDateOfBirth(selected);
+                    }
+                  }}
+                />
               )}
             </>
           )}
@@ -415,27 +390,6 @@ const styles = StyleSheet.create({
   },
   datePlaceholder: {
     color: colors.sub,
-  },
-  pickerPanel: {
-    marginTop: 8,
-    borderRadius: radius.button,
-    backgroundColor: colors.card,
-    paddingBottom: 8,
-    ...softShadow,
-  },
-  pickerDoneButton: {
-    alignSelf: "center",
-    marginTop: 4,
-    marginBottom: 8,
-    paddingHorizontal: 28,
-    paddingVertical: 10,
-    borderRadius: radius.button,
-    backgroundColor: colors.navy,
-  },
-  pickerDoneText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: "#FFFFFF",
   },
   error: {
     fontFamily: fonts.medium,
