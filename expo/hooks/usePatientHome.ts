@@ -35,6 +35,7 @@ export function usePatientHome() {
         .in("status", ["active", "pending"]);
       if (error) throw error;
       const rows = (data ?? []) as unknown as RelationWithDoctor[];
+      console.log("[relation-debug]", patientId, JSON.stringify(data), JSON.stringify(error));
       const active = rows.find((r) => r.status === "active");
       return active ?? rows[0] ?? null;
     },

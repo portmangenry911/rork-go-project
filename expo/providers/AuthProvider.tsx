@@ -58,16 +58,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     },
   });
 
-  const signIn = useCallback(
-    async (email: string, password: string): Promise<void> => {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-      if (error) throw error;
-    },
-    [],
-  );
+const signIn = useCallback(
+  async (email: string, password: string): Promise<void> => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error) throw error;
+    queryClient.clear();
+  },
+  [queryClient],
+);
 
   const signUp = useCallback(
     async ({
