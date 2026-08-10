@@ -33,10 +33,8 @@ export function usePatientHome() {
         .select("id, status, doctor:doctor_profiles(id, first_name, last_name)")
         .eq("patient_id", patientId as string)
         .in("status", ["active", "pending"]);
-      console.log("[relation-debug] patientId:", patientId, "rows:", data, "error:", error);
       if (error) throw error;
       const rows = (data ?? []) as unknown as RelationWithDoctor[];
-      console.log("[relation-debug]", patientId, JSON.stringify(data), JSON.stringify(error));
       const active = rows.find((r) => r.status === "active");
       return active ?? rows[0] ?? null;
     },
