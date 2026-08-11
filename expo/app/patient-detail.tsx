@@ -7,6 +7,7 @@ import { ArrowLeft, FileDown, MessageCircle } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -31,6 +32,7 @@ import { supabase } from "@/lib/supabase";
 import type {
   DailyCheckin,
   PatientProfile,
+  ProgressPhoto,
   TherapyCycle,
   WeeklyCheckinFull,
 } from "@/types/db";
@@ -215,10 +217,37 @@ export default function PatientDetailScreen() {
     },
   });
 
+  const photosQuery = useQuery({
+    queryKey: ["doctor-patient-photos", cycleId],
+    enabled: cycleId !== null,
+    queryFn: async (): Promise<ProgressPhoto[]> => {
+      const { data, error } = await supabase
+        .from("progress_photos")
+        .select(
+          "id, patient_id, therapy_cycle_id, weekly_checkin_id, file_url, angle, photo_date",
+        )
+        .eq("therapy_cycle_id", cycleId as string)
+        .order("photo_date", { ascending: false });
+      if (error) throw error;
+      const rows = (data ?? []) as unknown as ProgressPhoto[];
+      // Bucket is private — swap the stored path for a short-lived signed URL.
+      const signed = await Promise.all(
+        rows.map(async (row) => {
+          const { data: signedData } = await supabase.storage
+            .from("progress-photos")
+            .createSignedUrl(row.file_url, 3600);
+          return { ...row, file_url: signedData?.signedUrl ?? row.file_url };
+        }),
+      );
+      return signed;
+    },
+  });
+
   const isLoading =
     patientQuery.isPending ||
     cycleQuery.isPending ||
-    (cycleId !== null && (weeklyQuery.isPending || dailyQuery.isPending));
+    (cycleId !== null &&
+      (weeklyQuery.isPending || dailyQuery.isPending || photosQuery.isPending));
 
   if (isLoading) {
     return (
@@ -232,6 +261,7 @@ export default function PatientDetailScreen() {
   const cycle = cycleQuery.data ?? null;
   const weekly = weeklyQuery.data ?? [];
   const daily = dailyQuery.data ?? [];
+  const photos = photosQuery.data ?? [];
 
   const metaParts: string[] = [];
   if (patient?.city !== null && patient?.city !== undefined && patient.city.length > 0) {
@@ -551,6 +581,27 @@ export default function PatientDetailScreen() {
               </>
             )}
 
+            {photos.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>ФОТО ПРОГРЕСУ</Text>
+                <View style={styles.photoGrid} testID="doctor-progress-photos">
+                  {photos.map((photo) => (
+                    <View key={photo.id} style={styles.photoGridItem}>
+                      <Image
+                        source={{ uri: photo.file_url }}
+                        style={styles.photoGridImage}
+                      />
+                      <Text style={styles.photoGridDate}>
+                        {photo.photo_date !== null
+                          ? formatDateShort(photo.photo_date)
+                          : ""}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
             <Pressable
               testID="write-patient-button"
               onPress={() =>
@@ -729,6 +780,28 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: colors.sub,
     marginBottom: 10,
+  },
+  photoGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 20,
+  },
+  photoGridItem: {
+    width: "31%",
+  },
+  photoGridImage: {
+    width: "100%",
+    aspectRatio: 3 / 4,
+    borderRadius: radius.button,
+    backgroundColor: colors.card,
+  },
+  photoGridDate: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.sub,
+    marginTop: 4,
+    textAlign: "center",
   },
   listCard: {
     backgroundColor: colors.card,

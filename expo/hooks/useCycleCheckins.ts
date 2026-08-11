@@ -43,7 +43,12 @@ export function useDailyCheckins(cycleId: string | null) {
   });
 }
 
-/** All progress photos for a cycle, ordered by photo_date ascending. */
+/**
+ * All progress photos for a cycle, ordered by photo_date ascending.
+ * The "progress-photos" storage bucket is private, so `file_url` in the DB
+ * row holds a storage path, not a usable URL — we swap it here for a
+ * short-lived signed URL before returning to the UI.
+ */
 export function useProgressPhotos(cycleId: string | null) {
   return useQuery({
     queryKey: ["progress-photos", cycleId],
@@ -57,7 +62,16 @@ export function useProgressPhotos(cycleId: string | null) {
         .eq("therapy_cycle_id", cycleId as string)
         .order("photo_date", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as unknown as ProgressPhoto[];
+      const rows = (data ?? []) as unknown as ProgressPhoto[];
+      const signed = await Promise.all(
+        rows.map(async (row) => {
+          const { data: signedData } = await supabase.storage
+            .from("progress-photos")
+            .createSignedUrl(row.file_url, 3600);
+          return { ...row, file_url: signedData?.signedUrl ?? row.file_url };
+        }),
+      );
+      return signed;
     },
   });
 }

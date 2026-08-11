@@ -212,16 +212,17 @@ export default function WeeklyCheckinScreen() {
             console.log("[weekly-checkin] upload skipped:", uploadError.message);
             continue;
           }
-          const { data: urlData } = supabase.storage
-            .from("progress-photos")
-            .getPublicUrl(path);
+          // The "progress-photos" bucket is private (contains sensitive
+          // patient body photos), so we store the storage path here, not a
+          // public URL. Readers (patient progress screen, doctor detail
+          // screen) generate a short-lived signed URL from this path.
           const { error: photoRowError } = await supabase
             .from("progress_photos")
             .insert({
               patient_id: profile.id,
               therapy_cycle_id: cycle.id,
               weekly_checkin_id: weeklyCheckinId,
-              file_url: urlData.publicUrl,
+              file_url: path,
               angle: key,
               photo_date: checkinDate,
             });
