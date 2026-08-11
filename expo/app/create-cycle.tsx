@@ -27,12 +27,12 @@ import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme
 import { useDoctorHome } from "@/hooks/useDoctorHome";
 import { supabase } from "@/lib/supabase";
 
-type GoalType = "weight" | "lab" | "course" | "custom";
+type GoalType = "weight" | "lab_marker" | "course_completion" | "custom";
 
 const GOAL_OPTIONS: { key: GoalType; label: string }[] = [
   { key: "weight", label: "Вага" },
-  { key: "lab", label: "Лаб." },
-  { key: "course", label: "Курс" },
+  { key: "lab_marker", label: "Лаб." },
+  { key: "course_completion", label: "Курс" },
   { key: "custom", label: "Кастом" },
 ];
 
