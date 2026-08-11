@@ -73,8 +73,14 @@ export function useConversationMessages(conversationId: string | null) {
 
   useEffect(() => {
     if (conversationId === null) return;
+    // Unique channel name per mount — reusing "messages-{conversationId}"
+    // across quick navigations can hand back an already-subscribed channel
+    // object from the client's internal registry, and calling .on() on an
+    // already-subscribed channel throws "cannot add postgres_changes
+    // callbacks ... after subscribe()". A unique suffix avoids that clash.
+    const channelId = `messages-${conversationId}-${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel(`messages-${conversationId}`)
+      .channel(channelId)
       .on(
         "postgres_changes",
         {
@@ -91,6 +97,7 @@ export function useConversationMessages(conversationId: string | null) {
       )
       .subscribe();
     return () => {
+      channel.unsubscribe();
       supabase.removeChannel(channel);
     };
   }, [conversationId, queryClient]);
