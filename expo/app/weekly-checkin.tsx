@@ -31,8 +31,6 @@ import { formatKg } from "@/utils/format";
 
 const SYMPTOMS = ["Немає", "Нудота", "Втома", "Головний біль", "Запор"] as const;
 
-const DUPLICATE_WEEK = "__duplicate_week__";
-
 const ANGLES: { key: PhotoAngle; label: string }[] = [
   { key: "front", label: "Спереду" },
   { key: "side", label: "Збоку" },
@@ -145,6 +143,7 @@ export default function WeeklyCheckinScreen() {
     mutationFn: async (): Promise<{
       weekDelta: number | null;
       cycleDelta: number | null;
+      isRepeat: boolean;
     }> => {
       if (cycle === null) {
         throw new Error("Активний цикл не знайдено.");
@@ -153,15 +152,16 @@ export default function WeeklyCheckinScreen() {
         throw new Error("Профіль пацієнта не знайдено.");
       }
 
-      const { data: existing, error: existingError } = await supabase
+      // A patient can now log more than one weekly check-in for the same
+      // week (e.g. someone who wants to track more closely). We just note
+      // whether this is a repeat entry for the success screen — it no
+      // longer blocks the save.
+      const { count: existingCount } = await supabase
         .from("weekly_checkins")
-        .select("id")
+        .select("id", { count: "exact", head: true })
         .eq("therapy_cycle_id", cycle.id)
-        .eq("week_number", weekNumber)
-        .maybeSingle();
-      if (existingError === null && existing !== null) {
-        throw new Error(DUPLICATE_WEEK);
-      }
+        .eq("week_number", weekNumber);
+      const isRepeat = (existingCount ?? 0) > 0;
 
       const checkinDate = todayISO();
       const selectedSymptoms = symptoms.includes("Немає") ? [] : symptoms;
@@ -187,9 +187,6 @@ export default function WeeklyCheckinScreen() {
         .select("id")
         .single();
       if (insertError) {
-        if (insertError.code === "23505") {
-          throw new Error(DUPLICATE_WEEK);
-        }
         throw new Error(insertError.message);
       }
 
@@ -200,7 +197,7 @@ export default function WeeklyCheckinScreen() {
         const photo = photos[key];
         if (photo === null || userId === null) continue;
         try {
-          const path = `${userId}/${cycle.id}/${checkinDate}/${key}.jpg`;
+          const path = `${userId}/${cycle.id}/${weeklyCheckinId}/${key}.jpg`;
           const bytes = base64ToBytes(photo.base64);
           const { error: uploadError } = await supabase.storage
             .from("progress-photos")
@@ -240,10 +237,12 @@ export default function WeeklyCheckinScreen() {
       return {
         weekDelta: prevWeight !== null ? weight - prevWeight : null,
         cycleDelta: cycle.goal_start !== null ? weight - cycle.goal_start : null,
+        isRepeat,
       };
     },
     onSuccess: (result) => {
       setDeltas(result);
+      setIsDuplicate(result.isRepeat);
       setIsSaved(true);
       queryClient.invalidateQueries({ queryKey: ["weekly-checkins"] });
       queryClient.invalidateQueries({ queryKey: ["latest-checkin"] });
@@ -251,11 +250,6 @@ export default function WeeklyCheckinScreen() {
     },
     onError: (err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
-      if (message === DUPLICATE_WEEK) {
-        setIsDuplicate(true);
-        setIsSaved(true);
-        return;
-      }
       console.log("[weekly-checkin] save failed:", message);
       setError(message);
     },
@@ -294,64 +288,45 @@ export default function WeeklyCheckinScreen() {
           <Check size={40} color={colors.tealDeep} strokeWidth={2.4} />
         </View>
         <Text style={styles.successTitle}>
-          {isDuplicate ? "Ви вже заповнили цей тиждень 👍" : "Тиждень зафіксовано!"}
+          {isDuplicate ? "Повторний чек-ін збережено!" : "Тиждень зафіксовано!"}
         </Text>
-        {!isDuplicate && (
-          <>
-            <Text style={styles.successText}>
-              Прогрес оновлено. Лікар побачить нові дані та фото.
+        <Text style={styles.successText}>
+          {isDuplicate
+            ? "Це вже не перший запис за цей тиждень — лікар побачить обидва."
+            : "Прогрес оновлено. Лікар побачить нові дані та фото."}
+        </Text>
+        <View style={styles.statRow}>
+          <View style={styles.statCard}>
+            <Text style={[styles.statValue, styles.tealText]}>
+              {deltas.weekDelta !== null
+                ? `${formatSignedKg(deltas.weekDelta)} кг`
+                : "—"}
             </Text>
-            <View style={styles.statRow}>
-              <View style={styles.statCard}>
-                <Text style={[styles.statValue, styles.tealText]}>
-                  {deltas.weekDelta !== null
-                    ? `${formatSignedKg(deltas.weekDelta)} кг`
-                    : "—"}
-                </Text>
-                <Text style={styles.statLabel}>за тиждень</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={[styles.statValue, styles.navyText]}>
-                  {deltas.cycleDelta !== null
-                    ? `${formatSignedKg(deltas.cycleDelta)} кг`
-                    : "—"}
-                </Text>
-                <Text style={styles.statLabel}>за цикл</Text>
-              </View>
-            </View>
-          </>
-        )}
-        {isDuplicate ? (
-          <Pressable
-            testID="weekly-home-button"
-            onPress={() => router.back()}
-            style={({ pressed }) => [styles.fullWidth, pressed && styles.pressed]}
+            <Text style={styles.statLabel}>за тиждень</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={[styles.statValue, styles.navyText]}>
+              {deltas.cycleDelta !== null
+                ? `${formatSignedKg(deltas.cycleDelta)} кг`
+                : "—"}
+            </Text>
+            <Text style={styles.statLabel}>за цикл</Text>
+          </View>
+        </View>
+        <Pressable
+          testID="weekly-to-progress-button"
+          onPress={() => router.replace("/(patient)/progress")}
+          style={({ pressed }) => [styles.fullWidth, pressed && styles.pressed]}
+        >
+          <LinearGradient
+            colors={[colors.tealDeep, colors.teal]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.gradientButton}
           >
-            <LinearGradient
-              colors={[colors.navyDeep, colors.navy]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.gradientButton}
-            >
-              <Text style={styles.gradientButtonText}>На головну</Text>
-            </LinearGradient>
-          </Pressable>
-        ) : (
-          <Pressable
-            testID="weekly-to-progress-button"
-            onPress={() => router.replace("/(patient)/progress")}
-            style={({ pressed }) => [styles.fullWidth, pressed && styles.pressed]}
-          >
-            <LinearGradient
-              colors={[colors.tealDeep, colors.teal]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.gradientButton}
-            >
-              <Text style={styles.gradientButtonText}>До прогресу</Text>
-            </LinearGradient>
-          </Pressable>
-        )}
+            <Text style={styles.gradientButtonText}>До прогресу</Text>
+          </LinearGradient>
+        </Pressable>
       </View>
     );
   }
