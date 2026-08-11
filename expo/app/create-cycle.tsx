@@ -82,6 +82,8 @@ export default function CreateCycleScreen() {
   const [activePicker, setActivePicker] = useState<"start" | "end" | null>(
     null,
   );
+  const [draftStartDate, setDraftStartDate] = useState<Date | null>(null);
+  const [draftEndDate, setDraftEndDate] = useState<Date | null>(null);
   const [metricName, setMetricName] = useState<string>("");
   const [metricValue, setMetricValue] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
@@ -349,22 +351,36 @@ export default function CreateCycleScreen() {
 
           <Text style={styles.label}>Дата початку</Text>
           {Platform.OS === "web" ? (
-            <TextInput
-              testID="start-date-input"
-              style={styles.input}
-              value={startDateText}
-              onChangeText={setStartDateText}
-              placeholder="РРРР-ММ-ДД"
-              placeholderTextColor={colors.sub}
-              editable={hasPatients}
-            />
+            React.createElement("input", {
+              "data-testid": "start-date-input",
+              type: "date",
+              value: startDateText,
+              disabled: !hasPatients,
+              onChange: (e: { target: { value: string } }) =>
+                setStartDateText(e.target.value),
+              style: {
+                height: 54,
+                borderRadius: radius.button,
+                backgroundColor: colors.card,
+                paddingLeft: 16,
+                paddingRight: 16,
+                border: "none",
+                outline: "none",
+                fontSize: 16,
+                fontFamily: fonts.medium,
+                color: colors.ink,
+                width: "100%",
+                boxSizing: "border-box",
+              },
+            })
           ) : (
             <Pressable
               testID="start-date-input"
               style={styles.pickerField}
-              onPress={() =>
-                setActivePicker((prev) => (prev === "start" ? null : "start"))
-              }
+              onPress={() => {
+                setDraftStartDate(startDate);
+                setActivePicker((prev) => (prev === "start" ? null : "start"));
+              }}
             >
               <Text style={styles.pickerText}>
                 {formatDisplayDate(startDate)}
@@ -373,37 +389,74 @@ export default function CreateCycleScreen() {
             </Pressable>
           )}
           {activePicker === "start" && Platform.OS !== "web" && (
-            <DateTimePicker
-              value={startDate}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={(event: DateTimePickerEvent, selected?: Date) => {
-                if (Platform.OS === "android") setActivePicker(null);
-                if (event.type !== "dismissed" && selected !== undefined) {
-                  setStartDate(selected);
-                }
-              }}
-            />
+            <View style={styles.pickerPanel}>
+              <DateTimePicker
+                value={draftStartDate ?? startDate}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                onChange={(event: DateTimePickerEvent, selected?: Date) => {
+                  if (Platform.OS === "android") {
+                    setActivePicker(null);
+                    if (event.type !== "dismissed" && selected !== undefined) {
+                      setStartDate(selected);
+                    }
+                    return;
+                  }
+                  if (event.type !== "dismissed" && selected !== undefined) {
+                    setDraftStartDate(selected);
+                  }
+                }}
+              />
+              {Platform.OS === "ios" && (
+                <Pressable
+                  testID="start-date-done"
+                  style={styles.pickerDoneButton}
+                  onPress={() => {
+                    if (draftStartDate !== null) {
+                      setStartDate(draftStartDate);
+                    }
+                    setDraftStartDate(null);
+                    setActivePicker(null);
+                  }}
+                >
+                  <Text style={styles.pickerDoneText}>Готово</Text>
+                </Pressable>
+              )}
+            </View>
           )}
 
           <Text style={styles.label}>Дата завершення</Text>
           {Platform.OS === "web" ? (
-            <TextInput
-              testID="end-date-input"
-              style={styles.input}
-              value={endDateText}
-              onChangeText={setEndDateText}
-              placeholder="РРРР-ММ-ДД"
-              placeholderTextColor={colors.sub}
-              editable={hasPatients}
-            />
+            React.createElement("input", {
+              "data-testid": "end-date-input",
+              type: "date",
+              value: endDateText,
+              disabled: !hasPatients,
+              onChange: (e: { target: { value: string } }) =>
+                setEndDateText(e.target.value),
+              style: {
+                height: 54,
+                borderRadius: radius.button,
+                backgroundColor: colors.card,
+                paddingLeft: 16,
+                paddingRight: 16,
+                border: "none",
+                outline: "none",
+                fontSize: 16,
+                fontFamily: fonts.medium,
+                color: colors.ink,
+                width: "100%",
+                boxSizing: "border-box",
+              },
+            })
           ) : (
             <Pressable
               testID="end-date-input"
               style={styles.pickerField}
-              onPress={() =>
-                setActivePicker((prev) => (prev === "end" ? null : "end"))
-              }
+              onPress={() => {
+                setDraftEndDate(endDate);
+                setActivePicker((prev) => (prev === "end" ? null : "end"));
+              }}
             >
               <Text
                 style={[
@@ -417,18 +470,41 @@ export default function CreateCycleScreen() {
             </Pressable>
           )}
           {activePicker === "end" && Platform.OS !== "web" && (
-            <DateTimePicker
-              value={endDate ?? new Date()}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              minimumDate={startDate}
-              onChange={(event: DateTimePickerEvent, selected?: Date) => {
-                if (Platform.OS === "android") setActivePicker(null);
-                if (event.type !== "dismissed" && selected !== undefined) {
-                  setEndDate(selected);
-                }
-              }}
-            />
+            <View style={styles.pickerPanel}>
+              <DateTimePicker
+                value={draftEndDate ?? endDate ?? new Date()}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                minimumDate={startDate}
+                onChange={(event: DateTimePickerEvent, selected?: Date) => {
+                  if (Platform.OS === "android") {
+                    setActivePicker(null);
+                    if (event.type !== "dismissed" && selected !== undefined) {
+                      setEndDate(selected);
+                    }
+                    return;
+                  }
+                  if (event.type !== "dismissed" && selected !== undefined) {
+                    setDraftEndDate(selected);
+                  }
+                }}
+              />
+              {Platform.OS === "ios" && (
+                <Pressable
+                  testID="end-date-done"
+                  style={styles.pickerDoneButton}
+                  onPress={() => {
+                    if (draftEndDate !== null) {
+                      setEndDate(draftEndDate);
+                    }
+                    setDraftEndDate(null);
+                    setActivePicker(null);
+                  }}
+                >
+                  <Text style={styles.pickerDoneText}>Готово</Text>
+                </Pressable>
+              )}
+            </View>
           )}
 
           <Text style={styles.sectionLabel}>Протокол терапії</Text>
@@ -566,6 +642,27 @@ const styles = StyleSheet.create({
   },
   pickerPlaceholder: {
     color: colors.sub,
+  },
+  pickerPanel: {
+    marginTop: 8,
+    borderRadius: radius.button,
+    backgroundColor: colors.card,
+    paddingBottom: 8,
+    ...softShadow,
+  },
+  pickerDoneButton: {
+    alignSelf: "center",
+    marginTop: 4,
+    marginBottom: 8,
+    paddingHorizontal: 28,
+    paddingVertical: 10,
+    borderRadius: radius.button,
+    backgroundColor: colors.navy,
+  },
+  pickerDoneText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: "#FFFFFF",
   },
   pickerList: {
     backgroundColor: colors.card,
