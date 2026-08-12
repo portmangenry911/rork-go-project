@@ -424,7 +424,36 @@ export default function PatientDetailScreen() {
       </body></html>`;
 
       if (Platform.OS === "web") {
-        await Print.printAsync({ html });
+        // expo-print ignores `html` on web and prints the live DOM instead.
+        // Render the report into a hidden iframe and print that document.
+        const frame = document.createElement("iframe");
+        frame.style.position = "fixed";
+        frame.style.right = "0";
+        frame.style.bottom = "0";
+        frame.style.width = "0";
+        frame.style.height = "0";
+        frame.style.border = "0";
+        document.body.appendChild(frame);
+
+        const doc = frame.contentDocument;
+        if (doc === null) throw new Error("Не вдалося створити документ звіту");
+        doc.open();
+        doc.write(html);
+        doc.close();
+
+        await new Promise<void>((resolve) => {
+          const done = (): void => resolve();
+          if (frame.contentWindow === null) {
+            done();
+            return;
+          }
+          frame.contentWindow.addEventListener("load", done, { once: true });
+          setTimeout(done, 1500);
+        });
+
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+        setTimeout(() => frame.remove(), 3000);
       } else {
         const { uri } = await Print.printToFileAsync({ html });
         const canShare = await Sharing.isAvailableAsync();
