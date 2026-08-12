@@ -3,11 +3,19 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Print from "expo-print";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { ArrowLeft, FileDown, MessageCircle } from "lucide-react-native";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  FileDown,
+  MessageCircle,
+  X,
+} from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -148,6 +156,7 @@ export default function PatientDetailScreen() {
   const [chartWidth, setChartWidth] = useState<number>(0);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const { profile: doctorProfile } = useDoctorHome();
 
   const patientQuery = useQuery({
@@ -585,8 +594,13 @@ export default function PatientDetailScreen() {
               <>
                 <Text style={styles.sectionLabel}>ФОТО ПРОГРЕСУ</Text>
                 <View style={styles.photoGrid} testID="doctor-progress-photos">
-                  {photos.map((photo) => (
-                    <View key={photo.id} style={styles.photoGridItem}>
+                  {photos.map((photo, index) => (
+                    <Pressable
+                      key={photo.id}
+                      testID={`doctor-photo-${photo.id}`}
+                      onPress={() => setViewerIndex(index)}
+                      style={styles.photoGridItem}
+                    >
                       <Image
                         source={{ uri: photo.file_url }}
                         style={styles.photoGridImage}
@@ -596,11 +610,78 @@ export default function PatientDetailScreen() {
                           ? formatDateShort(photo.photo_date)
                           : ""}
                       </Text>
-                    </View>
+                    </Pressable>
                   ))}
                 </View>
               </>
             )}
+
+            <Modal
+              visible={viewerIndex !== null}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setViewerIndex(null)}
+            >
+              <View style={styles.viewerOverlay}>
+                <Pressable
+                  testID="doctor-photo-viewer-close"
+                  style={styles.viewerClose}
+                  onPress={() => setViewerIndex(null)}
+                  hitSlop={12}
+                >
+                  <X size={26} color="#FFFFFF" strokeWidth={2} />
+                </Pressable>
+                {viewerIndex !== null && photos[viewerIndex] !== undefined && (
+                  <>
+                    <Image
+                      source={{ uri: photos[viewerIndex].file_url }}
+                      style={styles.viewerImage}
+                      resizeMode="contain"
+                    />
+                    <Text style={styles.viewerCaption}>
+                      {photos[viewerIndex].photo_date !== null
+                        ? formatDateShort(photos[viewerIndex].photo_date as string)
+                        : ""}
+                    </Text>
+                    <View style={styles.viewerNav}>
+                      <Pressable
+                        testID="doctor-photo-viewer-prev"
+                        onPress={() =>
+                          setViewerIndex((prev) =>
+                            prev !== null && prev > 0 ? prev - 1 : prev,
+                          )
+                        }
+                        disabled={viewerIndex === 0}
+                        style={[
+                          styles.viewerNavButton,
+                          viewerIndex === 0 && styles.viewerNavButtonDisabled,
+                        ]}
+                      >
+                        <ChevronLeft size={22} color="#FFFFFF" strokeWidth={2} />
+                      </Pressable>
+                      <Pressable
+                        testID="doctor-photo-viewer-next"
+                        onPress={() =>
+                          setViewerIndex((prev) =>
+                            prev !== null && prev < photos.length - 1
+                              ? prev + 1
+                              : prev,
+                          )
+                        }
+                        disabled={viewerIndex === photos.length - 1}
+                        style={[
+                          styles.viewerNavButton,
+                          viewerIndex === photos.length - 1 &&
+                            styles.viewerNavButtonDisabled,
+                        ]}
+                      >
+                        <ChevronRight size={22} color="#FFFFFF" strokeWidth={2} />
+                      </Pressable>
+                    </View>
+                  </>
+                )}
+              </View>
+            </Modal>
 
             <Pressable
               testID="write-patient-button"
@@ -802,6 +883,45 @@ const styles = StyleSheet.create({
     color: colors.sub,
     marginTop: 4,
     textAlign: "center",
+  },
+  viewerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  viewerClose: {
+    position: "absolute",
+    top: 56,
+    right: 24,
+    zIndex: 10,
+  },
+  viewerImage: {
+    width: "100%",
+    height: "70%",
+  },
+  viewerCaption: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: "#FFFFFF",
+    marginTop: 16,
+  },
+  viewerNav: {
+    flexDirection: "row",
+    gap: 40,
+    marginTop: 24,
+  },
+  viewerNavButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerNavButtonDisabled: {
+    opacity: 0.3,
   },
   listCard: {
     backgroundColor: colors.card,
