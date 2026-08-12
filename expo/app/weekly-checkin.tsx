@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Camera, Check, Minus, Plus } from "lucide-react-native";
+import { ArrowLeft, Camera, Check } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -20,6 +20,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import GradientSlider from "@/components/GradientSlider";
+import WeightRuler from "@/components/WeightRuler";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { usePatientHome } from "@/hooks/usePatientHome";
 import { supabase } from "@/lib/supabase";
@@ -375,40 +376,20 @@ export default function WeeklyCheckinScreen() {
             <View testID="weekly-step-1">
               <Text style={styles.title}>Ваша вага цього тижня?</Text>
               <View style={styles.card}>
-                <View style={styles.weightRow}>
-                  <Pressable
-                    testID="weight-minus"
-                    onPress={() => {
-                      lightTap();
-                      setWeight((w) => Math.max(Math.round((w - 0.1) * 10) / 10, 30));
-                    }}
-                    style={({ pressed }) => [
-                      styles.stepperButton,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Minus size={22} color={colors.navyDeep} strokeWidth={2.2} />
-                  </Pressable>
-                  <View style={styles.weightCenter}>
-                    <Text style={styles.weightNumber}>
-                      {weight.toFixed(1).replace(".", ",")}
-                    </Text>
-                    <Text style={styles.weightUnit}>кг</Text>
-                  </View>
-                  <Pressable
-                    testID="weight-plus"
-                    onPress={() => {
-                      lightTap();
-                      setWeight((w) => Math.min(Math.round((w + 0.1) * 10) / 10, 300));
-                    }}
-                    style={({ pressed }) => [
-                      styles.stepperButton,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Plus size={22} color={colors.navyDeep} strokeWidth={2.2} />
-                  </Pressable>
+                <View style={styles.weightCenter}>
+                  <Text style={styles.weightNumber}>
+                    {weight.toFixed(1).replace(".", ",")}
+                  </Text>
+                  <Text style={styles.weightUnit}>кг</Text>
                 </View>
+                <WeightRuler
+                  testID="weight-ruler"
+                  value={weight}
+                  onChange={setWeight}
+                />
+                <Text style={styles.rulerHint}>
+                  Проведіть пальцем вліво/вправо, щоб змінити вагу
+                </Text>
                 {prevWeight !== null && (
                   <Text style={styles.prevWeekText} testID="prev-week-line">
                     Минулого тижня — {formatKg(prevWeight)} кг ·{" "}
@@ -753,22 +734,10 @@ const styles = StyleSheet.create({
     marginTop: 14,
     ...cardShadow,
   },
-  weightRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  stepperButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.paper,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   weightCenter: {
     flexDirection: "row",
     alignItems: "baseline",
+    justifyContent: "center",
     gap: 6,
   },
   weightNumber: {
@@ -780,6 +749,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 16,
     color: colors.sub,
+  },
+  rulerHint: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: colors.sub,
+    textAlign: "center",
+    marginTop: 6,
   },
   prevWeekText: {
     fontFamily: fonts.semibold,
