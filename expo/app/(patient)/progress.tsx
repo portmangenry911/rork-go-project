@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,7 +20,7 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from "react-native-svg";
-import { Check } from "lucide-react-native";
+import { Check, ChevronLeft, ChevronRight, X } from "lucide-react-native";
 
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { useProgressPhotos, useWeeklyCheckins } from "@/hooks/useCycleCheckins";
@@ -27,6 +28,12 @@ import { usePatientHome } from "@/hooks/usePatientHome";
 import type { WeeklyCheckinFull } from "@/types/db";
 import { daysSince, formatDateShort } from "@/utils/dates";
 import { formatKg } from "@/utils/format";
+
+const ANGLE_LABELS: Record<string, string> = {
+  front: "Спереду",
+  side: "Збоку",
+  back: "Ззаду",
+};
 
 type MetricKey = "weight_kg" | "waist_cm" | "hips_cm" | "abdomen_cm";
 
@@ -176,6 +183,7 @@ export default function PatientProgressScreen() {
   const photosQuery = useProgressPhotos(cycle?.id ?? null);
   const [metric, setMetric] = useState<MetricKey>("weight_kg");
   const [chartWidth, setChartWidth] = useState<number>(0);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
   const rows: WeeklyCheckinFull[] = useMemo(
     () => weeklyQuery.data ?? [],
@@ -263,7 +271,8 @@ export default function PatientProgressScreen() {
         )
       : null;
 
-  const frontPhotos = (photosQuery.data ?? []).filter((p) => p.angle === "front");
+  const allPhotos = photosQuery.data ?? [];
+  const frontPhotos = allPhotos.filter((p) => p.angle === "front");
   const firstPhoto = frontPhotos[0] ?? null;
   const lastPhoto =
     frontPhotos.length > 1 ? frontPhotos[frontPhotos.length - 1] : null;
@@ -442,6 +451,103 @@ export default function PatientProgressScreen() {
               </View>
             </View>
           )}
+
+          {allPhotos.length > 0 && (
+            <View testID="photo-gallery">
+              <Text style={styles.sectionLabel}>УСІ ФОТО</Text>
+              <View style={styles.photoGrid}>
+                {allPhotos.map((photo, index) => (
+                  <Pressable
+                    key={photo.id}
+                    testID={`gallery-photo-${photo.id}`}
+                    onPress={() => setViewerIndex(index)}
+                    style={styles.photoGridItem}
+                  >
+                    <Image
+                      source={{ uri: photo.file_url }}
+                      style={styles.photoGridImage}
+                      resizeMode="cover"
+                    />
+                    <Text style={styles.photoGridCaption}>
+                      {ANGLE_LABELS[photo.angle] ?? photo.angle}
+                      {photo.photo_date !== null
+                        ? ` · ${formatDateShort(photo.photo_date)}`
+                        : ""}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <Modal
+            visible={viewerIndex !== null}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setViewerIndex(null)}
+          >
+            <View style={styles.viewerOverlay}>
+              <Pressable
+                testID="photo-viewer-close"
+                style={styles.viewerClose}
+                onPress={() => setViewerIndex(null)}
+                hitSlop={12}
+              >
+                <X size={26} color="#FFFFFF" strokeWidth={2} />
+              </Pressable>
+              {viewerIndex !== null && allPhotos[viewerIndex] !== undefined && (
+                <>
+                  <Image
+                    source={{ uri: allPhotos[viewerIndex].file_url }}
+                    style={styles.viewerImage}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.viewerCaption}>
+                    {ANGLE_LABELS[allPhotos[viewerIndex].angle] ??
+                      allPhotos[viewerIndex].angle}
+                    {allPhotos[viewerIndex].photo_date !== null
+                      ? ` · ${formatDateShort(allPhotos[viewerIndex].photo_date as string)}`
+                      : ""}
+                  </Text>
+                  <View style={styles.viewerNav}>
+                    <Pressable
+                      testID="photo-viewer-prev"
+                      onPress={() =>
+                        setViewerIndex((prev) =>
+                          prev !== null && prev > 0 ? prev - 1 : prev,
+                        )
+                      }
+                      disabled={viewerIndex === 0}
+                      style={[
+                        styles.viewerNavButton,
+                        viewerIndex === 0 && styles.viewerNavButtonDisabled,
+                      ]}
+                    >
+                      <ChevronLeft size={22} color="#FFFFFF" strokeWidth={2} />
+                    </Pressable>
+                    <Pressable
+                      testID="photo-viewer-next"
+                      onPress={() =>
+                        setViewerIndex((prev) =>
+                          prev !== null && prev < allPhotos.length - 1
+                            ? prev + 1
+                            : prev,
+                        )
+                      }
+                      disabled={viewerIndex === allPhotos.length - 1}
+                      style={[
+                        styles.viewerNavButton,
+                        viewerIndex === allPhotos.length - 1 &&
+                          styles.viewerNavButtonDisabled,
+                      ]}
+                    >
+                      <ChevronRight size={22} color="#FFFFFF" strokeWidth={2} />
+                    </Pressable>
+                  </View>
+                </>
+              )}
+            </View>
+          </Modal>
 
           {milestones.length > 0 && (
             <View testID="milestones">
@@ -699,6 +805,67 @@ const styles = StyleSheet.create({
     color: colors.sub,
     marginTop: 6,
     textAlign: "center",
+  },
+  photoGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 24,
+  },
+  photoGridItem: {
+    width: "31%",
+  },
+  photoGridImage: {
+    width: "100%",
+    aspectRatio: 0.8,
+    borderRadius: radius.card,
+    backgroundColor: colors.hairline,
+  },
+  photoGridCaption: {
+    fontFamily: fonts.medium,
+    fontSize: 10.5,
+    color: colors.sub,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  viewerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  viewerClose: {
+    position: "absolute",
+    top: 56,
+    right: 24,
+    zIndex: 10,
+  },
+  viewerImage: {
+    width: "100%",
+    height: "70%",
+  },
+  viewerCaption: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: "#FFFFFF",
+    marginTop: 16,
+  },
+  viewerNav: {
+    flexDirection: "row",
+    gap: 40,
+    marginTop: 24,
+  },
+  viewerNavButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerNavButtonDisabled: {
+    opacity: 0.3,
   },
   milestoneCard: {
     backgroundColor: colors.card,
