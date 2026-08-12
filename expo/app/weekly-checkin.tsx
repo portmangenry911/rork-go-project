@@ -120,8 +120,7 @@ export default function WeeklyCheckinScreen() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [3, 4],
+        allowsEditing: false,
         quality: 0.7,
         base64: true,
       });
