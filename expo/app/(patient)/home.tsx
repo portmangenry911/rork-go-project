@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import {
   Bell,
   CalendarClock,
+  Camera,
   Clock,
   KeyRound,
   MessageCircle,
@@ -57,6 +58,20 @@ export default function PatientHomeScreen() {
     },
   });
 
+  // Checks whether a "before" baseline photo already exists for the active
+  // cycle, so we know whether to show the onboarding prompt.
+  const beforePhotoQuery = useQuery({
+    queryKey: ["has-before-photo", cycle?.id ?? null],
+    enabled: cycle !== null,
+    queryFn: async (): Promise<boolean> => {
+      const { count } = await supabase
+        .from("progress_photos")
+        .select("id", { count: "exact", head: true })
+        .eq("therapy_cycle_id", cycle?.id as string);
+      return (count ?? 0) > 0;
+    },
+  });
+
   if (isLoading || relationQuery.isLoading) {
     return (
       <View style={styles.loading}>
@@ -72,6 +87,10 @@ export default function PatientHomeScreen() {
       : null;
 
   const hasActiveCycle = cycle !== null;
+  const showBeforePhotoPrompt =
+    hasActiveCycle &&
+    beforePhotoQuery.isSuccess &&
+    beforePhotoQuery.data === false;
 
   return (
     <ScrollView
@@ -100,6 +119,8 @@ export default function PatientHomeScreen() {
         </View>
       </View>
 
+      {showBeforePhotoPrompt && <BeforePhotoBanner />}
+
       {hasActiveCycle ? (
         <ActiveCycleContent
           doctorName={doctorName}
@@ -112,6 +133,27 @@ export default function PatientHomeScreen() {
         <WaitingState doctorName={doctorName} />
       )}
     </ScrollView>
+  );
+}
+
+function BeforePhotoBanner() {
+  const router = useRouter();
+  return (
+    <Pressable
+      testID="before-photo-banner"
+      onPress={() => router.push("/before-photo")}
+      style={({ pressed }) => [styles.beforeBanner, pressed && styles.pressed]}
+    >
+      <View style={styles.beforeBannerIcon}>
+        <Camera size={20} color={colors.tealDeep} strokeWidth={1.8} />
+      </View>
+      <View style={styles.beforeBannerText}>
+        <Text style={styles.beforeBannerTitle}>Додайте фото «до»</Text>
+        <Text style={styles.beforeBannerSubtitle}>
+          Зафіксуйте старт, щоб бачити прогрес
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -302,6 +344,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     ...softShadow,
+  },
+  beforeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: colors.mint,
+    borderRadius: radius.card,
+    padding: 16,
+    marginBottom: 16,
+  },
+  beforeBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  beforeBannerText: {
+    flex: 1,
+  },
+  beforeBannerTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 14.5,
+    color: colors.tealDeep,
+  },
+  beforeBannerSubtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    color: colors.sub,
+    marginTop: 2,
   },
   doctorCard: {
     flexDirection: "row",
