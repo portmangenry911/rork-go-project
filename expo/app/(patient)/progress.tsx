@@ -466,7 +466,7 @@ export default function PatientProgressScreen() {
                     <Image
                       source={{ uri: photo.file_url }}
                       style={styles.photoGridImage}
-                      resizeMode="cover"
+                      resizeMode="contain"
                     />
                     <Text style={styles.photoGridCaption}>
                       {ANGLE_LABELS[photo.angle] ?? photo.angle}

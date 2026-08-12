@@ -604,6 +604,7 @@ export default function PatientDetailScreen() {
                       <Image
                         source={{ uri: photo.file_url }}
                         style={styles.photoGridImage}
+                        resizeMode="contain"
                       />
                       <Text style={styles.photoGridDate}>
                         {photo.photo_date !== null
