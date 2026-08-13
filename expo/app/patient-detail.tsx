@@ -46,6 +46,7 @@ import type {
 } from "@/types/db";
 import { dateParts, daysSince, formatDateShort, todayISO } from "@/utils/dates";
 import { formatKg } from "@/utils/format";
+import { buildReportHtml } from "@/utils/report-html";
 
 interface FeedItem {
   kind: "daily" | "weekly";
@@ -350,78 +351,17 @@ export default function PatientDetailScreen() {
           ? `${doctorProfile.first_name} ${doctorProfile.last_name}`
           : "—";
       const today = todayISO();
-      const latestWeight =
-        [...weekly].reverse().find((w) => w.weight_kg !== null)?.weight_kg ??
-        null;
-      const delta =
-        latestWeight !== null && cycle?.goal_start != null
-          ? latestWeight - cycle.goal_start
-          : null;
-
-      const historyRows = [
-        ...daily.map((d) => ({
-          date: d.checkin_date ?? "",
-          type: "Daily",
-          wellbeing: d.wellbeing,
-          appetite: d.appetite,
-          energy: d.energy,
-          weight: null as number | null,
-          symptoms: [
-            d.nausea === true ? "Нудота" : null,
-            d.weakness === true ? "Втома" : null,
-          ]
-            .filter((s): s is string => s !== null)
-            .join(", "),
-        })),
-        ...weekly.map((w) => ({
-          date: w.checkin_date ?? "",
-          type: "Weekly",
-          wellbeing: w.wellbeing,
-          appetite: w.appetite,
-          energy: w.energy,
-          weight: w.weight_kg,
-          symptoms: (w.symptoms ?? []).join(", "),
-        })),
-      ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-
-      const tableRows = historyRows
-        .map(
-          (r) =>
-            `<tr><td>${r.date}</td><td>${r.type}</td><td>${r.wellbeing ?? "—"}</td><td>${r.appetite ?? "—"}</td><td>${r.energy ?? "—"}</td><td>${r.weight !== null ? `${r.weight} кг` : "—"}</td><td>${r.symptoms.length > 0 ? r.symptoms : "—"}</td></tr>`,
-        )
-        .join("");
-
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><style>
-        body{font-family:-apple-system,Helvetica,Arial,sans-serif;color:#16232E;padding:24px}
-        h1{color:#143A54;font-size:24px}h2{color:#1B4F72;font-size:18px;margin-top:28px}
-        p{font-size:14px;line-height:1.5;margin:4px 0}
-        table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
-        th,td{border:1px solid #E9EEF2;padding:6px;text-align:left}
-        th{background:#F3F6F8;color:#647685}
-      </style></head><body>
-        <h1>GLP One — Звіт пацієнта</h1>
-        <p>Пацієнт: ${patient.first_name} ${patient.last_name}</p>
-        <p>Дата народження: ${patient.date_of_birth ?? "—"}</p>
-        <p>Дата звіту: ${today}</p>
-        <p>Лікар: ${doctorName}</p>
-        <h2>Активний цикл</h2>
-        ${
-          cycle !== null
-            ? `<p>Протокол: ${cycle.protocol_name ?? "—"}</p>
-        <p>Початок: ${cycle.start_date ?? "—"} · Завершення: ${cycle.expected_end ?? "—"}</p>
-        <p>Мета: ${cycle.goal_start ?? "—"} → ${cycle.goal_target ?? "—"} ${cycle.goal_unit ?? ""}</p>
-        <p>День ${cycleDay ?? "—"} з ${totalDays ?? "—"}</p>`
-            : "<p>Немає активного циклу</p>"
-        }
-        <h2>Прогрес</h2>
-        <p>Стартова вага: ${cycle?.goal_start ?? "—"} кг</p>
-        <p>Поточна вага: ${latestWeight ?? "—"} кг</p>
-        <p>Зміна: ${delta !== null ? delta.toFixed(1) : "—"} кг</p>
-        <p>Ціль: ${cycle?.goal_target ?? "—"} кг</p>
-        <h2>Історія чек-інів</h2>
-        <table><tr><th>Дата</th><th>Тип</th><th>Самопоч</th><th>Апетит</th><th>Енергія</th><th>Вага</th><th>Симптоми</th></tr>${tableRows}</table>
-        <p style="margin-top:40px;color:grey;font-size:12px">Сформовано лікарем ${doctorName} · ${today}</p>
-      </body></html>`;
+      const html = buildReportHtml({
+        patient,
+        cycle,
+        weekly,
+        daily,
+        doctorName,
+        doctorSpecialization: doctorProfile?.specialization ?? null,
+        today,
+        cycleDay,
+        totalDays,
+      });
 
       if (Platform.OS === "web") {
         // expo-print ignores `html` on web and prints the live DOM instead.
