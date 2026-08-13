@@ -96,4 +96,5 @@ export interface ProgressPhoto {
   file_url: string;
   angle: PhotoAngle;
   photo_date: string | null;
+  created_at: string | null;
 }

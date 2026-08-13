@@ -155,24 +155,27 @@ const ANGLE_ORDER: Record<string, number> = { front: 0, side: 1, back: 2 };
 
 /**
  * Newest capture session first, and inside each session the angles always
- * run front → side → back. Sessions are keyed by weekly_checkin_id so a
- * session's three shots never interleave with another date's.
+ * run front -> side -> back. Sessions are keyed by weekly_checkin_id and
+ * ranked by created_at, because several sessions can share one photo_date.
  */
 function sortProgressPhotos(rows: ProgressPhoto[]): ProgressPhoto[] {
-  const sessionRank = new Map<string, string>();
+  const sessionKey = (row: ProgressPhoto): string =>
+    row.weekly_checkin_id ?? `date:${row.photo_date ?? ""}`;
+
+  const sessionStamp = new Map<string, string>();
   rows.forEach((row) => {
-    const key = row.weekly_checkin_id ?? `date:${row.photo_date}`;
-    const current = sessionRank.get(key);
-    const stamp = row.photo_date ?? "";
-    if (current === undefined || stamp > current) sessionRank.set(key, stamp);
+    const key = sessionKey(row);
+    const stamp = row.created_at ?? row.photo_date ?? "";
+    const current = sessionStamp.get(key);
+    if (current === undefined || stamp > current) sessionStamp.set(key, stamp);
   });
 
   return [...rows].sort((a, b) => {
-    const keyA = a.weekly_checkin_id ?? `date:${a.photo_date}`;
-    const keyB = b.weekly_checkin_id ?? `date:${b.photo_date}`;
+    const keyA = sessionKey(a);
+    const keyB = sessionKey(b);
     if (keyA !== keyB) {
-      const stampA = sessionRank.get(keyA) ?? "";
-      const stampB = sessionRank.get(keyB) ?? "";
+      const stampA = sessionStamp.get(keyA) ?? "";
+      const stampB = sessionStamp.get(keyB) ?? "";
       if (stampA !== stampB) return stampA < stampB ? 1 : -1;
       return keyA < keyB ? 1 : -1;
     }
@@ -264,10 +267,10 @@ export default function PatientDetailScreen() {
       const { data, error } = await supabase
         .from("progress_photos")
         .select(
-          "id, patient_id, therapy_cycle_id, weekly_checkin_id, file_url, angle, photo_date",
+          "id, patient_id, therapy_cycle_id, weekly_checkin_id, file_url, angle, photo_date, created_at",
         )
         .eq("therapy_cycle_id", cycleId as string)
-        .order("photo_date", { ascending: false });
+        .order("created_at", { ascending: false });
       if (error) throw error;
       const rows = sortProgressPhotos(
         (data ?? []) as unknown as ProgressPhoto[],
