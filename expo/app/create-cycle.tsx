@@ -73,6 +73,9 @@ export default function CreateCycleScreen() {
   const [goalStart, setGoalStart] = useState<string>("");
   const [goalTarget, setGoalTarget] = useState<string>("");
   const [customGoal, setCustomGoal] = useState<string>("");
+  const [goalWaist, setGoalWaist] = useState<string>("");
+  const [goalHips, setGoalHips] = useState<string>("");
+  const [goalAbdomen, setGoalAbdomen] = useState<string>("");
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [startDateText, setStartDateText] = useState<string>(
@@ -131,6 +134,10 @@ export default function CreateCycleScreen() {
           goal_start: goalType === "weight" ? parseNumber(goalStart) : null,
           goal_target: goalType === "weight" ? parseNumber(goalTarget) : null,
           goal_unit: goalType === "weight" ? "кг" : null,
+          // Measurement goals are optional — blank fields stay null.
+          goal_waist_cm: parseNumber(goalWaist),
+          goal_hips_cm: parseNumber(goalHips),
+          goal_abdomen_cm: parseNumber(goalAbdomen),
           start_date: start,
           expected_end: end,
           status: "active",
@@ -333,6 +340,52 @@ export default function CreateCycleScreen() {
               </View>
             </View>
           )}
+
+          <View style={styles.measureHead}>
+            <Text style={styles.label}>Цілі по замірах</Text>
+            <Text style={styles.optional}>необовʼязково</Text>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.rowItem}>
+              <Text style={styles.smallLabel}>Талія (см)</Text>
+              <TextInput
+                testID="goal-waist-input"
+                style={styles.input}
+                value={goalWaist}
+                onChangeText={setGoalWaist}
+                keyboardType="decimal-pad"
+                placeholder="—"
+                placeholderTextColor={colors.sub}
+                editable={hasPatients}
+              />
+            </View>
+            <View style={styles.rowItem}>
+              <Text style={styles.smallLabel}>Стегна (см)</Text>
+              <TextInput
+                testID="goal-hips-input"
+                style={styles.input}
+                value={goalHips}
+                onChangeText={setGoalHips}
+                keyboardType="decimal-pad"
+                placeholder="—"
+                placeholderTextColor={colors.sub}
+                editable={hasPatients}
+              />
+            </View>
+          </View>
+          <View style={styles.rowItemFull}>
+            <Text style={styles.smallLabel}>Живіт (см)</Text>
+            <TextInput
+              testID="goal-abdomen-input"
+              style={styles.input}
+              value={goalAbdomen}
+              onChangeText={setGoalAbdomen}
+              keyboardType="decimal-pad"
+              placeholder="—"
+              placeholderTextColor={colors.sub}
+              editable={hasPatients}
+            />
+          </View>
 
           {goalType === "custom" && (
             <>
@@ -723,6 +776,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
   },
+  measureHead: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+    marginTop: 4,
+  },
+  optional: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.sub,
+  },
+  smallLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.sub,
+    marginBottom: 7,
+  },
+  rowItemFull: { marginTop: 4 },
   rowItem: {
     flex: 1,
   },

@@ -254,7 +254,15 @@ export default function PatientProgressScreen() {
   const metricMeta = METRICS.find((m) => m.key === metric) ?? METRICS[0];
   const startValue = series.length > 0 ? series[0].value : null;
   const currentValue = series.length > 0 ? series[series.length - 1].value : null;
-  const goalValue = metric === "weight_kg" ? cycle?.goal_target ?? null : null;
+  // Measurement goals are optional — the chart only draws a line when set.
+  const goalValue =
+    metric === "weight_kg"
+      ? cycle?.goal_target ?? null
+      : metric === "waist_cm"
+        ? cycle?.goal_waist_cm ?? null
+        : metric === "hips_cm"
+          ? cycle?.goal_hips_cm ?? null
+          : cycle?.goal_abdomen_cm ?? null;
   const change =
     startValue !== null && currentValue !== null ? currentValue - startValue : null;
 

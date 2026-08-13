@@ -40,7 +40,7 @@ export function useDoctorPatients() {
       const { data: cyclesData, error: cyclesError } = await supabase
         .from("therapy_cycles")
         .select(
-          "id, doctor_id, patient_id, protocol_name, goal_type, goal_start, goal_target, goal_unit, start_date, expected_end, status",
+          "id, doctor_id, patient_id, protocol_name, goal_type, goal_start, goal_target, goal_unit, goal_waist_cm, goal_hips_cm, goal_abdomen_cm, start_date, expected_end, status",
         )
         .eq("doctor_id", doctorId as string)
         .eq("status", "active")

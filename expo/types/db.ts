@@ -42,6 +42,9 @@ export interface TherapyCycle {
   goal_start: number | null;
   goal_target: number | null;
   goal_unit: string | null;
+  goal_waist_cm: number | null;
+  goal_hips_cm: number | null;
+  goal_abdomen_cm: number | null;
   start_date: string | null;
   expected_end: string | null;
   status: "active" | "completed" | "archived";

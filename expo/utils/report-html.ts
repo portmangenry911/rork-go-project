@@ -182,7 +182,12 @@ function goalRingSvg(percent: number): string {
 
 /** Horizontal comparison bars for body measurements (start vs latest). */
 function measureBars(
-  rows: { label: string; first: number | null; last: number | null }[],
+  rows: {
+    label: string;
+    first: number | null;
+    last: number | null;
+    goal: number | null;
+  }[],
 ): string {
   const usable = rows.filter((r) => r.last !== null);
   if (usable.length === 0) {
@@ -190,7 +195,7 @@ function measureBars(
   }
 
   const maxVal = Math.max(
-    ...usable.flatMap((r) => [r.first ?? 0, r.last ?? 0]),
+    ...usable.flatMap((r) => [r.first ?? 0, r.last ?? 0, r.goal ?? 0]),
     1,
   );
 
@@ -204,17 +209,29 @@ function measureBars(
         diff === null ? "" : `${diff > 0 ? "+" : ""}${num(diff)} см`;
       const diffCls = diff !== null && diff < 0 ? "pos" : "neu";
 
+      const goalPct = r.goal !== null ? (r.goal / maxVal) * 100 : null;
+      const goalMark =
+        goalPct !== null
+          ? `<div class="mgoal" style="left:${goalPct.toFixed(1)}%"></div>`
+          : "";
+      const goalText =
+        r.goal !== null ? `<div class="mgoaltext">ціль ${num(r.goal)} см</div>` : "";
+
       return `<div class="mrow">
         <div class="mlabel">${esc(r.label)}</div>
         <div class="mbars">
           <div class="mtrack"><div class="mfill start" style="width:${firstPct.toFixed(1)}%"></div></div>
-          <div class="mtrack"><div class="mfill now" style="width:${lastPct.toFixed(1)}%"></div></div>
+          <div class="mtrack">
+            <div class="mfill now" style="width:${lastPct.toFixed(1)}%"></div>
+            ${goalMark}
+          </div>
         </div>
         <div class="mvals">
           <span class="mstart">${num(r.first)}</span>
           <span class="marrow">→</span>
           <span class="mnow">${num(r.last)} см</span>
           <span class="mdiff ${diffCls}">${diffTxt}</span>
+          ${goalText}
         </div>
       </div>`;
     })
@@ -275,9 +292,24 @@ export function buildReportHtml(input: ReportInput): string {
   const lastW = [...weekly].reverse()[0] ?? null;
 
   const measurements = measureBars([
-    { label: "Талія", first: firstW?.waist_cm ?? null, last: lastW?.waist_cm ?? null },
-    { label: "Стегна", first: firstW?.hips_cm ?? null, last: lastW?.hips_cm ?? null },
-    { label: "Живіт", first: firstW?.abdomen_cm ?? null, last: lastW?.abdomen_cm ?? null },
+    {
+      label: "Талія",
+      first: firstW?.waist_cm ?? null,
+      last: lastW?.waist_cm ?? null,
+      goal: cycle?.goal_waist_cm ?? null,
+    },
+    {
+      label: "Стегна",
+      first: firstW?.hips_cm ?? null,
+      last: lastW?.hips_cm ?? null,
+      goal: cycle?.goal_hips_cm ?? null,
+    },
+    {
+      label: "Живіт",
+      first: firstW?.abdomen_cm ?? null,
+      last: lastW?.abdomen_cm ?? null,
+      goal: cycle?.goal_abdomen_cm ?? null,
+    },
   ]);
 
   const weeklyRows =
@@ -384,7 +416,9 @@ export function buildReportHtml(input: ReportInput): string {
   .mrow:last-child { border-bottom: none; }
   .mlabel { width: 70px; font-size: 9.5pt; font-weight: 600; color: ${C.ink}; }
   .mbars { flex: 1; }
-  .mtrack { height: 7px; background: ${C.paper}; border-radius: 4px; overflow: hidden; margin: 3px 0; }
+  .mtrack { height: 7px; background: ${C.paper}; border-radius: 4px; margin: 3px 0; position: relative; overflow: hidden; }
+  .mgoal { position: absolute; top: -2px; bottom: -2px; width: 2px; background: ${C.gold}; }
+  .mgoaltext { font-size: 7.5pt; color: ${C.gold}; margin-top: 2px; }
   .mfill { height: 100%; border-radius: 4px; }
   .mfill.start { background: #C7D3DC; }
   .mfill.now { background: linear-gradient(90deg, ${C.navy}, ${C.teal}); }
