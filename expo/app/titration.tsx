@@ -1,6 +1,9 @@
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, GripVertical, Plus, Trash2 } from "lucide-react-native";
+import { ArrowLeft, CalendarDays, GripVertical, Plus, Trash2 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -77,6 +80,23 @@ function fromISO(iso: string | null): string {
   return `${d}.${m}.${y}`;
 }
 
+function isoToDate(iso: string): Date {
+  const parsed = toISO(iso);
+  if (parsed === null) return new Date();
+  const [y, m, d] = parsed.split("-");
+  return new Date(Number(y), Number(m) - 1, Number(d));
+}
+
+function dateToDisplay(date: Date): string {
+  const d = String(date.getDate()).padStart(2, "0");
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  return `${d}.${m}.${date.getFullYear()}`;
+}
+
+function dateToInputValue(text: string): string {
+  return toISO(text) ?? "";
+}
+
 function emptyStep(): DraftStep {
   return {
     key: makeKey(),
@@ -102,6 +122,8 @@ export default function TitrationScreen() {
   const [steps, setSteps] = useState<DraftStep[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<boolean>(false);
+  const [activePicker, setActivePicker] = useState<string | null>(null);
+  const [draftDate, setDraftDate] = useState<Date | null>(null);
 
   const stepsQuery = useQuery({
     queryKey: ["titration", cycleId],
@@ -340,24 +362,30 @@ export default function TitrationScreen() {
               <View style={styles.dateRow}>
                 <View style={styles.dateCol}>
                   <Text style={styles.label}>Початок</Text>
-                  <TextInput
-                    style={styles.input}
+                  <DateField
+                    fieldKey={`${step.key}-start`}
                     value={step.startDate}
-                    onChangeText={(t) => updateStep(step.key, { startDate: t })}
-                    placeholder="12.08.2026"
-                    placeholderTextColor={colors.sub}
+                    placeholder="Оберіть дату"
                     testID={`titration-start-${index}`}
+                    activePicker={activePicker}
+                    draftDate={draftDate}
+                    setActivePicker={setActivePicker}
+                    setDraftDate={setDraftDate}
+                    onPick={(text) => updateStep(step.key, { startDate: text })}
                   />
                 </View>
                 <View style={styles.dateCol}>
                   <Text style={styles.label}>Завершення</Text>
-                  <TextInput
-                    style={styles.input}
+                  <DateField
+                    fieldKey={`${step.key}-end`}
                     value={step.endDate}
-                    onChangeText={(t) => updateStep(step.key, { endDate: t })}
-                    placeholder="08.09.2026"
-                    placeholderTextColor={colors.sub}
+                    placeholder="Оберіть дату"
                     testID={`titration-end-${index}`}
+                    activePicker={activePicker}
+                    draftDate={draftDate}
+                    setActivePicker={setActivePicker}
+                    setDraftDate={setDraftDate}
+                    onPick={(text) => updateStep(step.key, { endDate: text })}
                   />
                 </View>
               </View>
@@ -401,6 +429,117 @@ export default function TitrationScreen() {
         />
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+interface DateFieldProps {
+  fieldKey: string;
+  value: string;
+  placeholder: string;
+  testID: string;
+  activePicker: string | null;
+  draftDate: Date | null;
+  setActivePicker: (key: string | null) => void;
+  setDraftDate: (date: Date | null) => void;
+  onPick: (displayText: string) => void;
+}
+
+/** Date field: native input on web, DateTimePicker sheet on iOS/Android. */
+function DateField({
+  fieldKey,
+  value,
+  placeholder,
+  testID,
+  activePicker,
+  draftDate,
+  setActivePicker,
+  setDraftDate,
+  onPick,
+}: DateFieldProps) {
+  const isOpen = activePicker === fieldKey;
+
+  if (Platform.OS === "web") {
+    return React.createElement("input", {
+      type: "date",
+      value: dateToInputValue(value),
+      "data-testid": testID,
+      onChange: (e: { target: { value: string } }) => {
+        const raw = e.target.value;
+        if (raw.length === 0) {
+          onPick("");
+          return;
+        }
+        const [y, m, d] = raw.split("-");
+        onPick(`${d}.${m}.${y}`);
+      },
+      style: {
+        height: 46,
+        borderRadius: radius.button,
+        backgroundColor: colors.paper,
+        border: `1px solid ${colors.hairline}`,
+        paddingLeft: 12,
+        paddingRight: 12,
+        outline: "none",
+        fontSize: 15,
+        fontFamily: fonts.regular,
+        color: colors.ink,
+        width: "100%",
+        boxSizing: "border-box",
+      },
+    });
+  }
+
+  return (
+    <View>
+      <Pressable
+        testID={testID}
+        style={styles.pickerField}
+        onPress={() => {
+          setDraftDate(value.length > 0 ? isoToDate(value) : new Date());
+          setActivePicker(isOpen ? null : fieldKey);
+        }}
+      >
+        <Text
+          style={value.length > 0 ? styles.pickerText : styles.pickerPlaceholder}
+        >
+          {value.length > 0 ? value : placeholder}
+        </Text>
+        <CalendarDays size={17} color={colors.sub} strokeWidth={1.8} />
+      </Pressable>
+
+      {isOpen ? (
+        <View style={styles.pickerPanel}>
+          <DateTimePicker
+            value={draftDate ?? new Date()}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(event: DateTimePickerEvent, selected?: Date) => {
+              if (Platform.OS === "android") {
+                setActivePicker(null);
+                if (event.type !== "dismissed" && selected !== undefined) {
+                  onPick(dateToDisplay(selected));
+                }
+                return;
+              }
+              if (event.type !== "dismissed" && selected !== undefined) {
+                setDraftDate(selected);
+              }
+            }}
+          />
+          {Platform.OS === "ios" ? (
+            <Pressable
+              style={styles.pickerDoneButton}
+              onPress={() => {
+                if (draftDate !== null) onPick(dateToDisplay(draftDate));
+                setActivePicker(null);
+              }}
+            >
+              <Text style={styles.pickerDoneText}>Готово</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -518,6 +657,41 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 15,
     color: colors.ink,
+  },
+  pickerField: {
+    height: 46,
+    borderRadius: radius.button,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    backgroundColor: colors.paper,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pickerText: { fontFamily: fonts.medium, fontSize: 14, color: colors.ink },
+  pickerPlaceholder: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.sub,
+  },
+  pickerPanel: {
+    marginTop: 8,
+    backgroundColor: colors.card,
+    borderRadius: radius.button,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    paddingVertical: 6,
+  },
+  pickerDoneButton: {
+    alignSelf: "flex-end",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  pickerDoneText: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.navy,
   },
   notesInput: { height: 62, paddingTop: 12, textAlignVertical: "top" },
   addBtn: {
