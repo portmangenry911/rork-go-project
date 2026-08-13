@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileDown,
+  Syringe,
   MessageCircle,
   X,
 } from "lucide-react-native";
@@ -671,6 +672,28 @@ export default function PatientDetailScreen() {
             </Pressable>
 
             <Pressable
+              testID="titration-button"
+              onPress={() =>
+                router.push({
+                  pathname: "/titration",
+                  params: {
+                    cycleId: cycleId ?? "",
+                    patientName: `${patient.first_name} ${patient.last_name}`,
+                  },
+                })
+              }
+              disabled={cycleId === null}
+              style={({ pressed }) => [
+                styles.titrationButton,
+                cycleId === null && styles.titrationDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Syringe size={18} color={colors.navy} strokeWidth={2} />
+              <Text style={styles.exportButtonText}>Схема титрації</Text>
+            </Pressable>
+
+            <Pressable
               testID="export-pdf-button"
               onPress={handleExportPdf}
               disabled={isExporting}
@@ -972,6 +995,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#FFFFFF",
   },
+  titrationButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 52,
+    borderRadius: radius.button,
+    borderWidth: 1.5,
+    borderColor: colors.navy,
+    backgroundColor: colors.card,
+    marginBottom: 10,
+  },
+  titrationDisabled: { opacity: 0.4 },
   exportButton: {
     flexDirection: "row",
     alignItems: "center",

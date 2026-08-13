@@ -7,6 +7,7 @@ import {
   Camera,
   Clock,
   KeyRound,
+  Syringe,
   MessageCircle,
 } from "lucide-react-native";
 import React from "react";
@@ -121,6 +122,8 @@ export default function PatientHomeScreen() {
 
       {showBeforePhotoPrompt && <BeforePhotoBanner />}
 
+      {hasActiveCycle ? <CurrentDoseCard cycleId={cycle.id} /> : null}
+
       {hasActiveCycle ? (
         <ActiveCycleContent
           doctorName={doctorName}
@@ -133,6 +136,70 @@ export default function PatientHomeScreen() {
         <WaitingState doctorName={doctorName} />
       )}
     </ScrollView>
+  );
+}
+
+interface DoseRow {
+  dose_value: number;
+  dose_unit: string;
+  frequency: string;
+  start_date: string | null;
+  end_date: string | null;
+  notes: string | null;
+  step_order: number;
+}
+
+/** Shows only the titration step whose date range covers today. */
+function CurrentDoseCard({ cycleId }: { cycleId: string }) {
+  const doseQuery = useQuery({
+    queryKey: ["current-dose", cycleId],
+    queryFn: async (): Promise<DoseRow[]> => {
+      const { data, error } = await supabase
+        .from("titration_steps")
+        .select(
+          "dose_value, dose_unit, frequency, start_date, end_date, notes, step_order",
+        )
+        .eq("therapy_cycle_id", cycleId)
+        .order("step_order", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as DoseRow[];
+    },
+  });
+
+  const rows = doseQuery.data ?? [];
+  if (rows.length === 0) return null;
+
+  const now = new Date();
+  const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  const active =
+    rows.find((r) => {
+      const afterStart = r.start_date === null || r.start_date <= todayISO;
+      const beforeEnd = r.end_date === null || r.end_date >= todayISO;
+      return afterStart && beforeEnd;
+    }) ?? null;
+
+  if (active === null) return null;
+
+  const doseText = String(active.dose_value).replace(".", ",");
+
+  return (
+    <View style={styles.doseCard} testID="current-dose-card">
+      <View style={styles.doseIcon}>
+        <Syringe size={19} color={colors.tealDeep} strokeWidth={2} />
+      </View>
+      <View style={styles.doseBody}>
+        <Text style={styles.doseLabel}>ПОТОЧНЕ ДОЗУВАННЯ</Text>
+        <Text style={styles.doseValue}>
+          {doseText}
+          <Text style={styles.doseUnit}> {active.dose_unit}</Text>
+        </Text>
+        <Text style={styles.doseFreq}>{active.frequency}</Text>
+        {active.notes !== null && active.notes.length > 0 ? (
+          <Text style={styles.doseNote}>{active.notes}</Text>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -344,6 +411,54 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     ...softShadow,
+  },
+  doseCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    padding: 18,
+    marginHorizontal: 20,
+    marginBottom: 14,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.teal,
+    ...cardShadow,
+  },
+  doseIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.mint,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  doseBody: { flex: 1 },
+  doseLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 10,
+    letterSpacing: 1.3,
+    color: colors.sub,
+  },
+  doseValue: {
+    fontFamily: fonts.serif,
+    fontSize: 26,
+    color: colors.navyDeep,
+    marginTop: 2,
+  },
+  doseUnit: { fontFamily: fonts.medium, fontSize: 15, color: colors.sub },
+  doseFreq: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.sub,
+    marginTop: 1,
+  },
+  doseNote: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.gold,
+    marginTop: 6,
+    lineHeight: 17,
   },
   beforeBanner: {
     flexDirection: "row",
