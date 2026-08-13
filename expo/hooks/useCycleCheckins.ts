@@ -60,7 +60,9 @@ export function useProgressPhotos(cycleId: string | null) {
           "id, patient_id, therapy_cycle_id, weekly_checkin_id, file_url, angle, photo_date",
         )
         .eq("therapy_cycle_id", cycleId as string)
-        .order("photo_date", { ascending: true });
+        // Newest sessions first so the latest progress is at the top.
+        .order("photo_date", { ascending: false })
+        .order("angle", { ascending: true });
       if (error) throw error;
       const rows = (data ?? []) as unknown as ProgressPhoto[];
       const signed = await Promise.all(

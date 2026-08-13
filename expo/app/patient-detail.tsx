@@ -238,7 +238,9 @@ export default function PatientDetailScreen() {
           "id, patient_id, therapy_cycle_id, weekly_checkin_id, file_url, angle, photo_date",
         )
         .eq("therapy_cycle_id", cycleId as string)
-        .order("photo_date", { ascending: false });
+        // Newest sessions first, angles kept in a stable order within a date.
+        .order("photo_date", { ascending: false })
+        .order("angle", { ascending: true });
       if (error) throw error;
       const rows = (data ?? []) as unknown as ProgressPhoto[];
       // Bucket is private — swap the stored path for a short-lived signed URL.
