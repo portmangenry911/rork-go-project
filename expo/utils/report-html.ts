@@ -354,7 +354,7 @@ export function buildReportHtml(input: ReportInput): string {
   .pname { font-size: 19pt; font-weight: 700; color: ${C.navyDeep}; letter-spacing: -0.3px; }
   .pmeta { font-size: 9pt; color: ${C.sub}; margin-top: 3px; }
 
-  h2 { font-size: 8.5pt; letter-spacing: 2px; text-transform: uppercase; color: ${C.sub}; font-weight: 600; margin: 26px 0 10px; }
+  h2 { font-size: 8.5pt; letter-spacing: 2px; text-transform: uppercase; color: ${C.sub}; font-weight: 600; margin: 22px 0 9px; }
 
   .cyclecard { background: ${C.paper}; border: 1px solid ${C.hairline}; border-radius: 12px; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
   .cyclename { font-size: 13pt; font-weight: 700; color: ${C.navyDeep}; }
@@ -418,7 +418,9 @@ export function buildReportHtml(input: ReportInput): string {
 
   .footnote { margin-top: 22px; padding-top: 12px; border-top: 1px solid ${C.hairline}; font-size: 7.5pt; color: ${C.sub}; line-height: 1.6; }
 
-  .pagebreak { page-break-before: always; }
+  h2 { page-break-after: avoid; break-after: avoid; }
+  .panel, .cyclecard, .kpis { page-break-inside: avoid; break-inside: avoid; }
+  table { page-break-inside: auto; }
 </style></head>
 <body>
 
@@ -481,9 +483,6 @@ export function buildReportHtml(input: ReportInput): string {
 
   <h2>Заміри тіла · старт → поточні</h2>
   <div class="panel">${measurements}</div>
-
-  <div class="pagebreak"></div>
-  <div class="brandbar"></div>
 
   <h2>Щотижневі чек-іни</h2>
   <table>
