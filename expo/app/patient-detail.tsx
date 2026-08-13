@@ -151,6 +151,35 @@ function WeightChart({
   );
 }
 
+const ANGLE_ORDER: Record<string, number> = { front: 0, side: 1, back: 2 };
+
+/**
+ * Newest capture session first, and inside each session the angles always
+ * run front → side → back. Sessions are keyed by weekly_checkin_id so a
+ * session's three shots never interleave with another date's.
+ */
+function sortProgressPhotos(rows: ProgressPhoto[]): ProgressPhoto[] {
+  const sessionRank = new Map<string, string>();
+  rows.forEach((row) => {
+    const key = row.weekly_checkin_id ?? `date:${row.photo_date}`;
+    const current = sessionRank.get(key);
+    const stamp = row.photo_date ?? "";
+    if (current === undefined || stamp > current) sessionRank.set(key, stamp);
+  });
+
+  return [...rows].sort((a, b) => {
+    const keyA = a.weekly_checkin_id ?? `date:${a.photo_date}`;
+    const keyB = b.weekly_checkin_id ?? `date:${b.photo_date}`;
+    if (keyA !== keyB) {
+      const stampA = sessionRank.get(keyA) ?? "";
+      const stampB = sessionRank.get(keyB) ?? "";
+      if (stampA !== stampB) return stampA < stampB ? 1 : -1;
+      return keyA < keyB ? 1 : -1;
+    }
+    return (ANGLE_ORDER[a.angle] ?? 9) - (ANGLE_ORDER[b.angle] ?? 9);
+  });
+}
+
 export default function PatientDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -238,11 +267,11 @@ export default function PatientDetailScreen() {
           "id, patient_id, therapy_cycle_id, weekly_checkin_id, file_url, angle, photo_date",
         )
         .eq("therapy_cycle_id", cycleId as string)
-        // Newest sessions first, angles kept in a stable order within a date.
-        .order("photo_date", { ascending: false })
-        .order("angle", { ascending: true });
+        .order("photo_date", { ascending: false });
       if (error) throw error;
-      const rows = (data ?? []) as unknown as ProgressPhoto[];
+      const rows = sortProgressPhotos(
+        (data ?? []) as unknown as ProgressPhoto[],
+      );
       // Bucket is private — swap the stored path for a short-lived signed URL.
       const signed = await Promise.all(
         rows.map(async (row) => {

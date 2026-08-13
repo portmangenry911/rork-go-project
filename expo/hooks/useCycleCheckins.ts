@@ -10,6 +10,35 @@ const DAILY_COLUMNS =
   "id, therapy_cycle_id, patient_id, checkin_date, wellbeing, appetite, food_noise, energy, sleep, nausea, weakness, notes";
 
 /** All weekly check-ins for a cycle, ordered by week_number ascending. */
+const ANGLE_ORDER: Record<string, number> = { front: 0, side: 1, back: 2 };
+
+/**
+ * Newest capture session first, and inside each session the angles always
+ * run front → side → back. Sessions are keyed by weekly_checkin_id so a
+ * session's three shots never interleave with another date's.
+ */
+function sortProgressPhotos(rows: ProgressPhoto[]): ProgressPhoto[] {
+  const sessionRank = new Map<string, string>();
+  rows.forEach((row) => {
+    const key = row.weekly_checkin_id ?? `date:${row.photo_date}`;
+    const current = sessionRank.get(key);
+    const stamp = row.photo_date ?? "";
+    if (current === undefined || stamp > current) sessionRank.set(key, stamp);
+  });
+
+  return [...rows].sort((a, b) => {
+    const keyA = a.weekly_checkin_id ?? `date:${a.photo_date}`;
+    const keyB = b.weekly_checkin_id ?? `date:${b.photo_date}`;
+    if (keyA !== keyB) {
+      const stampA = sessionRank.get(keyA) ?? "";
+      const stampB = sessionRank.get(keyB) ?? "";
+      if (stampA !== stampB) return stampA < stampB ? 1 : -1;
+      return keyA < keyB ? 1 : -1;
+    }
+    return (ANGLE_ORDER[a.angle] ?? 9) - (ANGLE_ORDER[b.angle] ?? 9);
+  });
+}
+
 export function useWeeklyCheckins(cycleId: string | null) {
   return useQuery({
     queryKey: ["weekly-checkins", cycleId],
@@ -60,11 +89,11 @@ export function useProgressPhotos(cycleId: string | null) {
           "id, patient_id, therapy_cycle_id, weekly_checkin_id, file_url, angle, photo_date",
         )
         .eq("therapy_cycle_id", cycleId as string)
-        // Newest sessions first so the latest progress is at the top.
-        .order("photo_date", { ascending: false })
-        .order("angle", { ascending: true });
+        .order("photo_date", { ascending: false });
       if (error) throw error;
-      const rows = (data ?? []) as unknown as ProgressPhoto[];
+      const rows = sortProgressPhotos(
+        (data ?? []) as unknown as ProgressPhoto[],
+      );
       const signed = await Promise.all(
         rows.map(async (row) => {
           const { data: signedData } = await supabase.storage
