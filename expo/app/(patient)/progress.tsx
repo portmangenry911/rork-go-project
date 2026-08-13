@@ -280,10 +280,10 @@ export default function PatientProgressScreen() {
       : null;
 
   const allPhotos = photosQuery.data ?? [];
+  // The query returns newest first, so the oldest front shot sits at the end.
   const frontPhotos = allPhotos.filter((p) => p.angle === "front");
-  const firstPhoto = frontPhotos[0] ?? null;
-  const lastPhoto =
-    frontPhotos.length > 1 ? frontPhotos[frontPhotos.length - 1] : null;
+  const firstPhoto = frontPhotos[frontPhotos.length - 1] ?? null;
+  const lastPhoto = frontPhotos.length > 1 ? frontPhotos[0] ?? null : null;
 
   return (
     <ScrollView
