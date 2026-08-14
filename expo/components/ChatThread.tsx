@@ -16,6 +16,7 @@ import { colors, fonts, softShadow } from "@/constants/theme";
 import { useConversationMessages } from "@/hooks/useChat";
 import type { ChatMessage } from "@/hooks/useChat";
 import { supabase } from "@/lib/supabase";
+import { pushNotification } from "@/hooks/useNotifications";
 
 interface ChatThreadProps {
   conversationId: string;
@@ -51,6 +52,47 @@ export default function ChatThread({
         body,
       });
       if (error) throw new Error(error.message);
+
+      // Notify the other side of the conversation.
+      const { data: convo } = await supabase
+        .from("conversations")
+        .select("doctor_id, patient_id")
+        .eq("id", conversationId)
+        .maybeSingle();
+      if (convo === null || convo === undefined) return;
+
+      const [doctorRes, patientRes] = await Promise.all([
+        supabase
+          .from("doctor_profiles")
+          .select("user_id, first_name, last_name")
+          .eq("id", convo.doctor_id as string)
+          .maybeSingle(),
+        supabase
+          .from("patient_profiles")
+          .select("user_id, first_name, last_name")
+          .eq("id", convo.patient_id as string)
+          .maybeSingle(),
+      ]);
+
+      const doctorUser = doctorRes.data?.user_id ?? null;
+      const patientUser = patientRes.data?.user_id ?? null;
+      const iAmDoctor = myUserId === doctorUser;
+      const recipient = iAmDoctor ? patientUser : doctorUser;
+      if (recipient === null) return;
+
+      const sender = iAmDoctor ? doctorRes.data : patientRes.data;
+      const senderName =
+        sender === null || sender === undefined
+          ? "Нове повідомлення"
+          : `${sender.first_name ?? ""} ${sender.last_name ?? ""}`.trim();
+
+      await pushNotification({
+        recipientUserId: recipient as string,
+        kind: "message",
+        title: senderName.length > 0 ? senderName : "Нове повідомлення",
+        body: body.length > 80 ? `${body.slice(0, 80)}…` : body,
+        link: iAmDoctor ? "/(patient)/chat" : "/(doctor)/chat",
+      });
     },
     onSuccess: () => {
       setText("");

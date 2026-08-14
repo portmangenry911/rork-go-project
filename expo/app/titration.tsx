@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PrimaryButton from "@/components/PrimaryButton";
 import { cardShadow, colors, fonts, radius } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
+import { pushNotification } from "@/hooks/useNotifications";
 
 interface TitrationRow {
   id: string;
@@ -114,7 +115,10 @@ export default function TitrationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const params = useLocalSearchParams<{ cycleId?: string; patientName?: string }>();
+  const params = useLocalSearchParams<{
+    cycleId?: string;
+    patientName?: string;
+  }>();
   const cycleId = typeof params.cycleId === "string" ? params.cycleId : null;
   const patientName =
     typeof params.patientName === "string" ? params.patientName : "";
@@ -225,6 +229,32 @@ export default function TitrationScreen() {
         .from("titration_steps")
         .insert(payload);
       if (insError) throw insError;
+
+      // Tell the patient their protocol changed.
+      const { data: cycleRow } = await supabase
+        .from("therapy_cycles")
+        .select("patient_id")
+        .eq("id", cycleId)
+        .maybeSingle();
+      const patientProfileId = cycleRow?.patient_id ?? null;
+      if (patientProfileId === null) return;
+
+      const { data: patientRow } = await supabase
+        .from("patient_profiles")
+        .select("user_id")
+        .eq("id", patientProfileId as string)
+        .maybeSingle();
+      const recipient = patientRow?.user_id ?? null;
+      if (recipient === null) return;
+
+      const first = payload[0];
+      await pushNotification({
+        recipientUserId: recipient as string,
+        kind: "dose",
+        title: "Лікар оновив схему терапії",
+        body: `Поточне дозування — ${String(first.dose_value).replace(".", ",")} ${first.dose_unit}, ${first.frequency}.`,
+        link: "/(patient)/home",
+      });
     },
     onSuccess: () => {
       setError(null);

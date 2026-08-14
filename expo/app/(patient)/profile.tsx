@@ -718,6 +718,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   signOut: {
+    marginTop: 24,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

@@ -2,7 +2,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
-  Bell,
   CalendarClock,
   Camera,
   Clock,
@@ -23,6 +22,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AvatarInitials from "@/components/AvatarInitials";
+import NotificationBell from "@/components/NotificationBell";
 import ProgressRing from "@/components/ProgressRing";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { usePatientHome } from "@/hooks/usePatientHome";
@@ -110,9 +110,7 @@ export default function PatientHomeScreen() {
           <Text style={styles.name}>{profile?.first_name ?? ""}</Text>
         </View>
         <View style={styles.topRight}>
-          <Pressable style={styles.bell} hitSlop={8}>
-            <Bell size={20} color={colors.ink} strokeWidth={1.8} />
-          </Pressable>
+          <NotificationBell />
           <AvatarInitials
             firstName={profile?.first_name}
             lastName={profile?.last_name}

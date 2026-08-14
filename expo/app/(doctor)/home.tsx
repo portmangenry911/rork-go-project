@@ -1,7 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
-  Bell,
   BellRing,
   CalendarPlus,
   CheckCircle2,
@@ -23,6 +22,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AvatarInitials from "@/components/AvatarInitials";
+import NotificationBell from "@/components/NotificationBell";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { useDoctorHome } from "@/hooks/useDoctorHome";
 import {
@@ -67,9 +67,7 @@ export default function DoctorHomeScreen() {
           <Text style={styles.name}>{profile?.last_name ?? ""}</Text>
         </View>
         <View style={styles.topRight}>
-          <Pressable style={styles.bell} hitSlop={8}>
-            <Bell size={20} color={colors.ink} strokeWidth={1.8} />
-          </Pressable>
+          <NotificationBell />
           <AvatarInitials
             firstName={profile?.first_name}
             lastName={profile?.last_name}
