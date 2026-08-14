@@ -1,6 +1,9 @@
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { ArrowLeft, BellOff, BellRing } from "lucide-react-native";
+import { ArrowLeft, BellOff, BellRing, Clock } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,13 +24,13 @@ import { supabase } from "@/lib/supabase";
 import {
   DEFAULT_REMINDERS,
   WEEKDAY_LABELS,
+  WEEKDAY_ORDER,
+  WEEKDAY_SHORT,
   isSupported,
   rescheduleReminders,
   type ReminderSettings,
 } from "@/lib/notifications";
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-const MINUTES = [0, 15, 30, 45];
 const INTERVALS: { value: number; label: string }[] = [
   { value: 1, label: "Щодня" },
   { value: 3, label: "Кожні 3 дні" },
@@ -42,6 +45,14 @@ function splitTime(value: string): { hour: number; minute: number } {
   return { hour: Number(h) || 9, minute: Number(m) || 0 };
 }
 
+/** Wraps "HH:MM" in a throwaway Date, which is what the picker consumes. */
+function timeToDate(value: string): Date {
+  const { hour, minute } = splitTime(value);
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  return date;
+}
+
 export default function RemindersScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -52,6 +63,7 @@ export default function RemindersScreen() {
   const [settings, setSettings] = useState<ReminderSettings>(DEFAULT_REMINDERS);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openPicker, setOpenPicker] = useState<"daily" | "weekly" | null>(null);
 
   const settingsQuery = useQuery({
     queryKey: ["reminder-settings", patientId],
@@ -115,9 +127,6 @@ export default function RemindersScreen() {
     setStatus(null);
     setSettings((prev) => ({ ...prev, ...patch }));
   };
-
-  const dailyParts = splitTime(settings.daily_time);
-  const weeklyParts = splitTime(settings.weekly_time);
 
   return (
     <View style={styles.screen}>
@@ -204,10 +213,14 @@ export default function RemindersScreen() {
                 </View>
 
                 <Text style={styles.label}>Час</Text>
-                <TimePicker
-                  hour={dailyParts.hour}
-                  minute={dailyParts.minute}
+                <TimeField
+                  value={settings.daily_time}
+                  isOpen={openPicker === "daily"}
+                  onToggle={() =>
+                    setOpenPicker(openPicker === "daily" ? null : "daily")
+                  }
                   onChange={(h, m) => update({ daily_time: buildTime(h, m) })}
+                  onClose={() => setOpenPicker(null)}
                   testID="daily-time"
                 />
               </>
@@ -227,24 +240,25 @@ export default function RemindersScreen() {
 
             <Text style={styles.label}>День тижня</Text>
             <View style={styles.chipWrap}>
-              {WEEKDAY_LABELS.map((label, index) => (
+              {WEEKDAY_ORDER.map((day) => (
                 <Pressable
-                  key={label}
-                  onPress={() => update({ weekly_weekday: index })}
+                  key={day}
+                  onPress={() => update({ weekly_weekday: day })}
                   style={[
                     styles.dayChip,
-                    settings.weekly_weekday === index ? styles.chipActive : null,
+                    settings.weekly_weekday === day ? styles.chipActive : null,
                   ]}
+                  testID={`weekday-${day}`}
                 >
                   <Text
                     style={[
                       styles.chipText,
-                      settings.weekly_weekday === index
+                      settings.weekly_weekday === day
                         ? styles.chipTextActive
                         : null,
                     ]}
                   >
-                    {label.slice(0, 2)}
+                    {WEEKDAY_SHORT[day]}
                   </Text>
                 </Pressable>
               ))}
@@ -254,10 +268,14 @@ export default function RemindersScreen() {
             </Text>
 
             <Text style={styles.label}>Час</Text>
-            <TimePicker
-              hour={weeklyParts.hour}
-              minute={weeklyParts.minute}
+            <TimeField
+              value={settings.weekly_time}
+              isOpen={openPicker === "weekly"}
+              onToggle={() =>
+                setOpenPicker(openPicker === "weekly" ? null : "weekly")
+              }
               onChange={(h, m) => update({ weekly_time: buildTime(h, m) })}
+              onClose={() => setOpenPicker(null)}
               testID="weekly-time"
             />
           </View>
@@ -280,58 +298,87 @@ export default function RemindersScreen() {
   );
 }
 
-interface TimePickerProps {
-  hour: number;
-  minute: number;
+interface TimeFieldProps {
+  value: string;
+  isOpen: boolean;
+  onToggle: () => void;
   onChange: (hour: number, minute: number) => void;
+  onClose: () => void;
   testID: string;
 }
 
-/** Compact hour/minute strip — avoids a native modal for a two-value choice. */
-function TimePicker({ hour, minute, onChange, testID }: TimePickerProps) {
-  return (
-    <View testID={testID}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.timeStrip}
-      >
-        {HOURS.map((h) => (
-          <Pressable
-            key={h}
-            onPress={() => onChange(h, minute)}
-            style={[styles.timeCell, hour === h ? styles.chipActive : null]}
-          >
-            <Text
-              style={[
-                styles.chipText,
-                hour === h ? styles.chipTextActive : null,
-              ]}
-            >
-              {String(h).padStart(2, "0")}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+/** Native time wheel on iOS/Android, native time input on web. */
+function TimeField({
+  value,
+  isOpen,
+  onToggle,
+  onChange,
+  onClose,
+  testID,
+}: TimeFieldProps) {
+  if (Platform.OS === "web") {
+    return React.createElement("input", {
+      type: "time",
+      value,
+      "data-testid": testID,
+      onChange: (e: { target: { value: string } }) => {
+        const raw = e.target.value;
+        if (raw.length < 4) return;
+        const [h, m] = raw.split(":");
+        onChange(Number(h), Number(m));
+      },
+      style: {
+        height: 50,
+        borderRadius: radius.button,
+        backgroundColor: colors.paper,
+        border: `1px solid ${colors.hairline}`,
+        paddingLeft: 14,
+        paddingRight: 14,
+        outline: "none",
+        fontSize: 17,
+        fontFamily: fonts.semibold,
+        color: colors.ink,
+        width: "100%",
+        boxSizing: "border-box",
+      },
+    });
+  }
 
-      <View style={styles.minuteRow}>
-        {MINUTES.map((m) => (
-          <Pressable
-            key={m}
-            onPress={() => onChange(hour, m)}
-            style={[styles.timeCell, minute === m ? styles.chipActive : null]}
-          >
-            <Text
-              style={[
-                styles.chipText,
-                minute === m ? styles.chipTextActive : null,
-              ]}
-            >
-              :{String(m).padStart(2, "0")}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+  return (
+    <View>
+      <Pressable style={styles.timeField} onPress={onToggle} testID={testID}>
+        <Clock size={17} color={colors.sub} strokeWidth={1.8} />
+        <Text style={styles.timeFieldValue}>{value}</Text>
+      </Pressable>
+
+      {isOpen && (
+        <View style={styles.wheelPanel}>
+          <DateTimePicker
+            value={timeToDate(value)}
+            mode="time"
+            is24Hour
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            minuteInterval={5}
+            onChange={(event: DateTimePickerEvent, selected?: Date) => {
+              if (Platform.OS === "android") {
+                onClose();
+                if (event.type !== "dismissed" && selected !== undefined) {
+                  onChange(selected.getHours(), selected.getMinutes());
+                }
+                return;
+              }
+              if (event.type !== "dismissed" && selected !== undefined) {
+                onChange(selected.getHours(), selected.getMinutes());
+              }
+            }}
+          />
+          {Platform.OS === "ios" && (
+            <Pressable style={styles.wheelDone} onPress={onClose}>
+              <Text style={styles.wheelDoneText}>Готово</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -429,17 +476,40 @@ const styles = StyleSheet.create({
     color: colors.navy,
     marginTop: 8,
   },
-  timeStrip: { gap: 6, paddingRight: 6 },
-  timeCell: {
-    width: 48,
-    height: 40,
+  timeField: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    height: 50,
     borderRadius: radius.button,
     borderWidth: 1,
     borderColor: colors.hairline,
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: colors.paper,
+    paddingHorizontal: 14,
   },
-  minuteRow: { flexDirection: "row", gap: 6, marginTop: 8 },
+  timeFieldValue: {
+    fontFamily: fonts.semibold,
+    fontSize: 17,
+    color: colors.ink,
+  },
+  wheelPanel: {
+    marginTop: 8,
+    backgroundColor: colors.card,
+    borderRadius: radius.button,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    paddingVertical: 4,
+  },
+  wheelDone: {
+    alignSelf: "flex-end",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  wheelDoneText: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.navy,
+  },
   error: {
     fontFamily: fonts.medium,
     fontSize: 13,

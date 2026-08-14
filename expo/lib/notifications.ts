@@ -26,6 +26,7 @@ export const DEFAULT_REMINDERS: ReminderSettings = {
   weekly_time: "10:00",
 };
 
+/** Indexed by stored weekday value: 0 = Sunday … 6 = Saturday. */
 export const WEEKDAY_LABELS = [
   "Неділя",
   "Понеділок",
@@ -35,6 +36,20 @@ export const WEEKDAY_LABELS = [
   "Пʼятниця",
   "Субота",
 ] as const;
+
+/** Display order starting on Monday, as expected in UA/RU/KZ. */
+export const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
+
+/** Two-letter chips for the weekday picker, aligned with WEEKDAY_ORDER. */
+export const WEEKDAY_SHORT: Record<number, string> = {
+  1: "Пн",
+  2: "Вт",
+  3: "Ср",
+  4: "Чт",
+  5: "Пт",
+  6: "Сб",
+  0: "Нд",
+};
 
 const DAILY_TAG = "glp-daily";
 const WEEKLY_TAG = "glp-weekly";
