@@ -54,11 +54,12 @@ export default function ChatThread({
       if (error) throw new Error(error.message);
 
       // Notify the other side of the conversation.
-      const { data: convo } = await supabase
+      const { data: convo, error: convoError } = await supabase
         .from("conversations")
         .select("doctor_id, patient_id")
         .eq("id", conversationId)
         .maybeSingle();
+      console.log("[notify] convo", conversationId, convo, convoError?.message);
       if (convo === null || convo === undefined) return;
 
       const [doctorRes, patientRes] = await Promise.all([
@@ -78,6 +79,8 @@ export default function ChatThread({
       const patientUser = patientRes.data?.user_id ?? null;
       const iAmDoctor = myUserId === doctorUser;
       const recipient = iAmDoctor ? patientUser : doctorUser;
+      console.log("[notify] me", myUserId, "doctor", doctorUser, "patient", patientUser, "recipient", recipient);
+      console.log("[notify] errors", doctorRes.error?.message, patientRes.error?.message);
       if (recipient === null) return;
 
       const sender = iAmDoctor ? doctorRes.data : patientRes.data;
@@ -86,6 +89,7 @@ export default function ChatThread({
           ? "Нове повідомлення"
           : `${sender.first_name ?? ""} ${sender.last_name ?? ""}`.trim();
 
+      console.log("[notify] inserting for", recipient);
       await pushNotification({
         recipientUserId: recipient as string,
         kind: "message",
