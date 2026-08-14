@@ -8,7 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileDown,
-  Syringe,
+  SlidersHorizontal,
   MessageCircle,
   X,
 } from "lucide-react-native";
@@ -723,7 +723,7 @@ export default function PatientDetailScreen() {
                 pressed && styles.pressed,
               ]}
             >
-              <Syringe size={18} color={colors.navy} strokeWidth={2} />
+              <SlidersHorizontal size={18} color={colors.navy} strokeWidth={2} />
               <Text style={styles.exportButtonText}>Схема титрації</Text>
             </Pressable>
 
@@ -1023,6 +1023,7 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: radius.button,
     backgroundColor: colors.navy,
+    marginTop: 12,
   },
   writeButtonText: {
     fontFamily: fonts.bold,
@@ -1039,7 +1040,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.navy,
     backgroundColor: colors.card,
-    marginBottom: 10,
+    marginTop: 12,
   },
   titrationDisabled: { opacity: 0.4 },
   exportButton: {

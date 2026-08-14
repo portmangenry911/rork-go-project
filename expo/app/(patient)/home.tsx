@@ -7,7 +7,7 @@ import {
   Camera,
   Clock,
   KeyRound,
-  Syringe,
+  SlidersHorizontal,
   MessageCircle,
 } from "lucide-react-native";
 import React from "react";
@@ -186,7 +186,7 @@ function CurrentDoseCard({ cycleId }: { cycleId: string }) {
   return (
     <View style={styles.doseCard} testID="current-dose-card">
       <View style={styles.doseIcon}>
-        <Syringe size={19} color={colors.tealDeep} strokeWidth={2} />
+        <SlidersHorizontal size={19} color={colors.tealDeep} strokeWidth={2} />
       </View>
       <View style={styles.doseBody}>
         <Text style={styles.doseLabel}>ПОТОЧНЕ ДОЗУВАННЯ</Text>
