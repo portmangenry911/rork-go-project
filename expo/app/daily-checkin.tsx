@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { usePatientHome } from "@/hooks/usePatientHome";
 import { supabase } from "@/lib/supabase";
+import { skipTodaysDaily } from "@/lib/notifications";
 
 const THUMB_SIZE = 32;
 
@@ -257,6 +258,8 @@ export default function DailyCheckinScreen() {
     onSuccess: (streakCount: number) => {
       setStreak(streakCount);
       setIsSaved(true);
+      // Today's job is done — drop the pending reminder so it stays quiet.
+      void skipTodaysDaily();
     },
     onError: (err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);

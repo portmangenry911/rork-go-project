@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
@@ -7,6 +7,7 @@ import {
   Camera,
   Clock,
   KeyRound,
+  BellRing,
   SlidersHorizontal,
   MessageCircle,
 } from "lucide-react-native";
@@ -122,6 +123,8 @@ export default function PatientHomeScreen() {
 
       {showBeforePhotoPrompt && <BeforePhotoBanner />}
 
+      {hasActiveCycle ? <ReminderPrompt patientId={profile?.id ?? null} /> : null}
+
       {hasActiveCycle ? <CurrentDoseCard cycleId={cycle.id} /> : null}
 
       {hasActiveCycle ? (
@@ -136,6 +139,70 @@ export default function PatientHomeScreen() {
         <WaitingState doctorName={doctorName} />
       )}
     </ScrollView>
+  );
+}
+
+/**
+ * One-time nudge after therapy starts: reminders already run on defaults,
+ * this only tells the patient they exist and where to change them.
+ */
+function ReminderPrompt({ patientId }: { patientId: string | null }) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const seenQuery = useQuery({
+    queryKey: ["reminder-onboarding", patientId],
+    enabled: patientId !== null,
+    queryFn: async (): Promise<boolean> => {
+      const { data, error } = await supabase
+        .from("reminder_settings")
+        .select("onboarding_seen")
+        .eq("patient_id", patientId as string)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.onboarding_seen === true;
+    },
+  });
+
+  const dismiss = async (): Promise<void> => {
+    if (patientId === null) return;
+    await supabase.from("reminder_settings").upsert(
+      { patient_id: patientId, onboarding_seen: true },
+      { onConflict: "patient_id" },
+    );
+    void queryClient.invalidateQueries({
+      queryKey: ["reminder-onboarding", patientId],
+    });
+  };
+
+  if (seenQuery.data !== false) return null;
+
+  return (
+    <View style={styles.promptCard} testID="reminder-prompt">
+      <View style={styles.promptIcon}>
+        <BellRing size={18} color={colors.tealDeep} strokeWidth={2} />
+      </View>
+      <View style={styles.promptBody}>
+        <Text style={styles.promptTitle}>Нагадування увімкнено</Text>
+        <Text style={styles.promptText}>
+          Щодня о 09:00 і щонеділі о 10:00. Можна змінити час і частоту.
+        </Text>
+        <View style={styles.promptActions}>
+          <Pressable
+            onPress={() => {
+              void dismiss();
+              router.push("/reminders");
+            }}
+            testID="reminder-prompt-open"
+          >
+            <Text style={styles.promptLink}>Налаштувати</Text>
+          </Pressable>
+          <Pressable onPress={() => void dismiss()} testID="reminder-prompt-skip">
+            <Text style={styles.promptSkip}>Зрозуміло</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -412,6 +479,43 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     ...softShadow,
   },
+  promptCard: {
+    flexDirection: "row",
+    gap: 13,
+    backgroundColor: colors.mint,
+    borderRadius: radius.card,
+    padding: 16,
+    marginHorizontal: 20,
+    marginBottom: 14,
+  },
+  promptIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  promptBody: { flex: 1 },
+  promptTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 14.5,
+    color: colors.navyDeep,
+  },
+  promptText: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.tealDeep,
+    marginTop: 3,
+  },
+  promptActions: { flexDirection: "row", gap: 20, marginTop: 10 },
+  promptLink: {
+    fontFamily: fonts.semibold,
+    fontSize: 13.5,
+    color: colors.navy,
+  },
+  promptSkip: { fontFamily: fonts.medium, fontSize: 13.5, color: colors.sub },
   doseCard: {
     flexDirection: "row",
     alignItems: "center",

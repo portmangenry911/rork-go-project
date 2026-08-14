@@ -24,6 +24,7 @@ import WeightRuler from "@/components/WeightRuler";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { usePatientHome } from "@/hooks/usePatientHome";
 import { supabase } from "@/lib/supabase";
+import { skipTodaysDaily } from "@/lib/notifications";
 import { useAuth } from "@/providers/AuthProvider";
 import type { PhotoAngle } from "@/types/db";
 import { base64ToBytes } from "@/utils/base64";
@@ -265,6 +266,7 @@ export default function WeeklyCheckinScreen() {
       setDeltas(result);
       setIsDuplicate(result.isRepeat);
       setIsSaved(true);
+      void skipTodaysDaily();
       queryClient.invalidateQueries({ queryKey: ["weekly-checkins"] });
       queryClient.invalidateQueries({ queryKey: ["latest-checkin"] });
       queryClient.invalidateQueries({ queryKey: ["progress-photos"] });

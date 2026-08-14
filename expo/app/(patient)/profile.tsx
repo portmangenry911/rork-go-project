@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { ChevronRight, LogOut, MessageCircle, Pencil } from "lucide-react-native";
+import { BellRing, ChevronRight, LogOut, MessageCircle, Pencil } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -47,13 +47,37 @@ export default function PatientProfileScreen() {
         .single();
       const patientId = profileResult.data?.id;
       if (!patientId) return null;
-      const { data } = await supabase
+      // No PostgREST embed here — the nested join was silently erroring and
+      // returning null. Two plain queries are resolved instead.
+      const { data: relRow, error: relError } = await supabase
         .from("doctor_patient_relations")
-        .select("id, status, doctor:doctor_profiles(id, first_name, last_name)")
+        .select("id, status, doctor_id")
         .eq("patient_id", patientId)
         .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
-      return data as unknown as RelationWithDoctor | null;
+      if (relError) {
+        console.log("[relation] relation query failed:", relError.message);
+        throw relError;
+      }
+      if (relRow === null || relRow.doctor_id === null) return null;
+
+      const { data: docRow, error: docError } = await supabase
+        .from("doctor_profiles")
+        .select("id, first_name, last_name")
+        .eq("id", relRow.doctor_id as string)
+        .maybeSingle();
+      if (docError) {
+        console.log("[relation] doctor query failed:", docError.message);
+        throw docError;
+      }
+
+      return {
+        id: relRow.id as string,
+        status: relRow.status as RelationWithDoctor["status"],
+        doctor: docRow as RelationWithDoctor["doctor"],
+      };
     },
   });
 
@@ -397,6 +421,21 @@ export default function PatientProfileScreen() {
             )}
 
             <Pressable
+              testID="reminders-link"
+              onPress={() => router.push("/reminders")}
+              style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
+            >
+              <View style={styles.menuIcon}>
+                <BellRing size={18} color={colors.tealDeep} strokeWidth={2} />
+              </View>
+              <View style={styles.menuText}>
+                <Text style={styles.menuTitle}>Нагадування</Text>
+                <Text style={styles.menuSub}>Час і частота чек-інів</Text>
+              </View>
+              <ChevronRight size={18} color={colors.sub} strokeWidth={1.8} />
+            </Pressable>
+
+            <Pressable
               testID="sign-out-button"
               onPress={handleSignOut}
               disabled={isSigningOut}
@@ -413,6 +452,31 @@ export default function PatientProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  menuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    padding: 16,
+    marginTop: 14,
+  },
+  menuIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.mint,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuText: { flex: 1 },
+  menuTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.ink },
+  menuSub: {
+    fontFamily: fonts.regular,
+    fontSize: 12.5,
+    color: colors.sub,
+    marginTop: 1,
+  },
   flex: {
     flex: 1,
     backgroundColor: colors.paper,
