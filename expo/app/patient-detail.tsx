@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileDown,
+  Images,
   SlidersHorizontal,
   MessageCircle,
   X,
@@ -308,6 +309,23 @@ export default function PatientDetailScreen() {
   const daily = dailyQuery.data ?? [];
   const photos = photosQuery.data ?? [];
 
+  // Only the two latest capture sessions are shown by default — a long cycle
+  // can hold dozens of shots and the doctor rarely scrolls past the recent ones.
+  const [showAllPhotos, setShowAllPhotos] = useState<boolean>(false);
+  const sessionOrder: string[] = [];
+  photos.forEach((photo) => {
+    const key = photo.weekly_checkin_id ?? `date:${photo.photo_date ?? ""}`;
+    if (!sessionOrder.includes(key)) sessionOrder.push(key);
+  });
+  const visibleSessions = showAllPhotos
+    ? sessionOrder
+    : sessionOrder.slice(0, 2);
+  const visiblePhotos = photos.filter((photo) => {
+    const key = photo.weekly_checkin_id ?? `date:${photo.photo_date ?? ""}`;
+    return visibleSessions.includes(key);
+  });
+  const hiddenSessionCount = sessionOrder.length - visibleSessions.length;
+
   const metaParts: string[] = [];
   if (patient?.city !== null && patient?.city !== undefined && patient.city.length > 0) {
     metaParts.push(patient.city);
@@ -598,11 +616,13 @@ export default function PatientDetailScreen() {
               <>
                 <Text style={styles.sectionLabel}>ФОТО ПРОГРЕСУ</Text>
                 <View style={styles.photoGrid} testID="doctor-progress-photos">
-                  {photos.map((photo, index) => (
+                  {visiblePhotos.map((photo) => (
                     <Pressable
                       key={photo.id}
                       testID={`doctor-photo-${photo.id}`}
-                      onPress={() => setViewerIndex(index)}
+                      onPress={() =>
+                        setViewerIndex(photos.findIndex((p) => p.id === photo.id))
+                      }
                       style={styles.photoGridItem}
                     >
                       <Image
@@ -618,6 +638,36 @@ export default function PatientDetailScreen() {
                     </Pressable>
                   ))}
                 </View>
+
+                {hiddenSessionCount > 0 && (
+                  <Pressable
+                    onPress={() => setShowAllPhotos(true)}
+                    style={({ pressed }) => [
+                      styles.morePhotosButton,
+                      pressed && styles.pressed,
+                    ]}
+                    testID="show-all-photos"
+                  >
+                    <Images size={17} color={colors.navy} strokeWidth={2} />
+                    <Text style={styles.morePhotosText}>
+                      Показати всі фото · ще {hiddenSessionCount}{" "}
+                      {hiddenSessionCount === 1 ? "чек-ін" : "чек-інів"}
+                    </Text>
+                  </Pressable>
+                )}
+
+                {showAllPhotos && sessionOrder.length > 2 && (
+                  <Pressable
+                    onPress={() => setShowAllPhotos(false)}
+                    style={({ pressed }) => [
+                      styles.morePhotosButton,
+                      pressed && styles.pressed,
+                    ]}
+                    testID="collapse-photos"
+                  >
+                    <Text style={styles.morePhotosText}>Згорнути</Text>
+                  </Pressable>
+                )}
               </>
             )}
 
@@ -1029,6 +1079,23 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 15,
     color: "#FFFFFF",
+  },
+  morePhotosButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 46,
+    borderRadius: radius.button,
+    borderWidth: 1.2,
+    borderColor: colors.hairline,
+    backgroundColor: colors.card,
+    marginTop: 12,
+  },
+  morePhotosText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.navy,
   },
   titrationButton: {
     flexDirection: "row",
