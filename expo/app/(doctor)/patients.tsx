@@ -174,6 +174,9 @@ export default function DoctorPatientsScreen() {
                     ? `Цикл · день ${p.cycleDay ?? "?"}${p.cycleTotalDays !== null ? ` / ${p.cycleTotalDays}` : ""}`
                     : "Немає активного циклу"}
                 </Text>
+                {p.attentionLabel !== null && (
+                  <Text style={styles.rowAttention}>{p.attentionLabel}</Text>
+                )}
               </View>
               <View style={styles.rowRight}>
                 {p.weightDelta !== null && (
@@ -298,6 +301,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 15,
     color: colors.ink,
+  },
+  rowAttention: {
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    color: colors.gold,
+    marginTop: 2,
   },
   rowSub: {
     fontFamily: fonts.medium,

@@ -1,6 +1,16 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { Bell, ChevronRight, Plus, RefreshCw, UserPlus } from "lucide-react-native";
+import {
+  Bell,
+  BellRing,
+  CalendarPlus,
+  CheckCircle2,
+  ChevronRight,
+  MessageCircle,
+  Plus,
+  RefreshCw,
+  UserPlus,
+} from "lucide-react-native";
 import React from "react";
 import {
   ActivityIndicator,
@@ -15,6 +25,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AvatarInitials from "@/components/AvatarInitials";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { useDoctorHome } from "@/hooks/useDoctorHome";
+import {
+  useDoctorPatients,
+  type DoctorPatientItem,
+} from "@/hooks/useDoctorPatients";
 
 const PLAN_LIMIT = 15;
 
@@ -22,6 +36,8 @@ export default function DoctorHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile, relations, isLoading } = useDoctorHome();
+  const { patients } = useDoctorPatients();
+  const flagged = patients.filter((p) => p.needsAttention);
 
   if (isLoading) {
     return (
@@ -128,30 +144,27 @@ export default function DoctorHomeScreen() {
       {hasPatients ? (
         <View style={styles.section} testID="needs-attention">
           <Text style={styles.sectionTitle}>Потребує уваги</Text>
-          <View style={styles.listCard}>
-            {relations.map((rel, index) => (
-              <View key={rel.id}>
-                {index > 0 && <View style={styles.divider} />}
-                <Pressable
-                  style={({ pressed }) => [styles.patientRow, pressed && styles.pressed]}
-                >
-                  <AvatarInitials
-                    firstName={rel.patient?.first_name}
-                    lastName={rel.patient?.last_name}
-                    size={42}
-                    tint="mint"
-                  />
-                  <View style={styles.patientInfo}>
-                    <Text style={styles.patientName}>
-                      {rel.patient?.first_name ?? ""} {rel.patient?.last_name ?? ""}
-                    </Text>
-                    <Text style={styles.patientSub}>Немає нових даних</Text>
-                  </View>
-                  <ChevronRight size={18} color={colors.sub} strokeWidth={1.8} />
-                </Pressable>
+
+          {flagged.length === 0 ? (
+            <View style={styles.allClearCard} testID="all-clear">
+              <CheckCircle2 size={22} color={colors.tealDeep} strokeWidth={2} />
+              <View style={styles.allClearText}>
+                <Text style={styles.allClearTitle}>Усі пацієнти в нормі</Text>
+                <Text style={styles.allClearSub}>
+                  Чек-іни свіжі, тривожних сигналів немає.
+                </Text>
               </View>
-            ))}
-          </View>
+            </View>
+          ) : (
+            <View style={styles.listCard}>
+              {flagged.map((item, index) => (
+                <View key={item.patientId}>
+                  {index > 0 && <View style={styles.divider} />}
+                  <AttentionRow item={item} />
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       ) : (
         <View style={styles.emptyState} testID="doctor-empty-state">
@@ -174,6 +187,86 @@ export default function DoctorHomeScreen() {
         </View>
       )}
     </ScrollView>
+  );
+}
+
+interface ActionSpec {
+  label: string;
+  icon: React.ReactNode;
+}
+
+/** Maps an attention reason to the single most useful next action. */
+function actionFor(item: DoctorPatientItem): ActionSpec {
+  switch (item.attentionReason) {
+    case "cycle_ending":
+      return {
+        label: "Новий цикл",
+        icon: <CalendarPlus size={15} color={colors.navy} strokeWidth={2} />,
+      };
+    case "no_checkin":
+      return {
+        label: "Нагадати",
+        icon: <BellRing size={15} color={colors.navy} strokeWidth={2} />,
+      };
+    default:
+      return {
+        label: "Написати",
+        icon: <MessageCircle size={15} color={colors.navy} strokeWidth={2} />,
+      };
+  }
+}
+
+/** One flagged patient: reason on the left, one contextual action on the right. */
+function AttentionRow({ item }: { item: DoctorPatientItem }) {
+  const router = useRouter();
+  const action = actionFor(item);
+  const fullName = `${item.firstName} ${item.lastName}`;
+
+  const openPatient = (): void => {
+    router.push({ pathname: "/patient-detail", params: { id: item.patientId } });
+  };
+
+  const runAction = (): void => {
+    if (item.attentionReason === "cycle_ending") {
+      router.push("/create-cycle");
+      return;
+    }
+    router.push({
+      pathname: "/chat-thread",
+      params: { patientId: item.patientId, name: fullName },
+    });
+  };
+
+  return (
+    <View style={styles.attentionRow}>
+      <Pressable
+        onPress={openPatient}
+        style={({ pressed }) => [styles.attentionMain, pressed && styles.pressed]}
+        testID={`attention-row-${item.patientId}`}
+      >
+        <AvatarInitials
+          firstName={item.firstName}
+          lastName={item.lastName}
+          size={42}
+          tint="mint"
+        />
+        <View style={styles.patientInfo}>
+          <Text style={styles.patientName}>{fullName}</Text>
+          <Text style={styles.attentionLabel}>
+            {item.attentionLabel ?? "Потребує уваги"}
+          </Text>
+        </View>
+      </Pressable>
+
+      <Pressable
+        onPress={runAction}
+        style={({ pressed }) => [styles.actionChip, pressed && styles.pressed]}
+        testID={`attention-action-${item.patientId}`}
+      >
+        {action.icon}
+        <Text style={styles.actionChipText}>{action.label}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -347,6 +440,62 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: colors.hairline,
+  },
+  attentionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    gap: 10,
+  },
+  attentionMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  attentionLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.gold,
+    marginTop: 2,
+  },
+  actionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    height: 34,
+    borderRadius: radius.pill,
+    borderWidth: 1.2,
+    borderColor: colors.navy,
+    backgroundColor: colors.card,
+  },
+  actionChipText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12.5,
+    color: colors.navy,
+  },
+  allClearCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 13,
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    padding: 17,
+    ...cardShadow,
+  },
+  allClearText: { flex: 1 },
+  allClearTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  allClearSub: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.sub,
+    marginTop: 2,
   },
   patientRow: {
     flexDirection: "row",

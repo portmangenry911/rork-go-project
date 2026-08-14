@@ -18,9 +18,30 @@ export interface DoctorPatientItem {
   weightDelta: number | null;
   /** Most recent check-in date (daily or weekly), null if none. */
   lastCheckinDate: string | null;
-  /** True when no check-in for 3+ days (needs attention). */
+  /** True when at least one attention rule fired. */
   needsAttention: boolean;
+  /** Why the patient needs attention — null when everything is fine. */
+  attentionReason: AttentionReason | null;
+  /** Short Ukrainian line shown under the patient name. */
+  attentionLabel: string | null;
+  /** Latest wellbeing score from a weekly check-in, null when unknown. */
+  latestWellbeing: number | null;
+  /** Days left until the cycle's expected end, null when no end date. */
+  daysToCycleEnd: number | null;
 }
+
+export type AttentionReason =
+  | "no_checkin"
+  | "low_wellbeing"
+  | "weight_gain"
+  | "cycle_ending";
+
+/** Days without a check-in before the patient is flagged. */
+const CHECKIN_GRACE_DAYS = 3;
+/** Wellbeing at or below this counts as a warning sign. */
+const LOW_WELLBEING = 3;
+/** Cycle is treated as ending when this few days remain. */
+const CYCLE_ENDING_DAYS = 3;
 
 /** Loads the doctor's active patients enriched with cycle + check-in data. */
 export function useDoctorPatients() {
@@ -54,6 +75,7 @@ export function useDoctorPatients() {
         checkin_date: string | null;
         weight_kg: number | null;
         week_number: number | null;
+        wellbeing: number | null;
       }[] = [];
       let dailyRows: { therapy_cycle_id: string; checkin_date: string | null }[] =
         [];
@@ -62,7 +84,7 @@ export function useDoctorPatients() {
         const [weeklyRes, dailyRes] = await Promise.all([
           supabase
             .from("weekly_checkins")
-            .select("therapy_cycle_id, checkin_date, weight_kg, week_number")
+            .select("therapy_cycle_id, checkin_date, weight_kg, week_number, wellbeing")
             .in("therapy_cycle_id", cycleIds)
             .order("checkin_date", { ascending: false }),
           supabase
@@ -125,9 +147,61 @@ export function useDoctorPatients() {
             lastCheckinDate = weeklyDate ?? dailyDate;
           }
 
-          const needsAttention =
-            cycle !== null &&
-            (lastCheckinDate === null || daysSince(lastCheckinDate) >= 3);
+          const latestWellbeing =
+            cycleWeekly.find((w) => w.wellbeing !== null)?.wellbeing ?? null;
+
+          // Two most recent weights, newest first — a rise means regression.
+          const recentWeights = cycleWeekly
+            .filter((w) => w.weight_kg !== null)
+            .slice(0, 2)
+            .map((w) => w.weight_kg as number);
+          const gainedWeight =
+            recentWeights.length === 2 &&
+            recentWeights[0] > recentWeights[1] + 0.5;
+
+          let daysToCycleEnd: number | null = null;
+          if (cycle?.expected_end != null) {
+            daysToCycleEnd = -daysSince(cycle.expected_end);
+          }
+
+          // Rules are ordered by urgency; the first match wins.
+          let attentionReason: AttentionReason | null = null;
+          let attentionLabel: string | null = null;
+
+          if (cycle !== null) {
+            const silentDays =
+              lastCheckinDate === null ? null : daysSince(lastCheckinDate);
+
+            if (lastCheckinDate === null) {
+              attentionReason = "no_checkin";
+              attentionLabel = "Жодного чек-іну";
+            } else if (silentDays !== null && silentDays >= CHECKIN_GRACE_DAYS) {
+              attentionReason = "no_checkin";
+              attentionLabel = `Без чек-іну ${silentDays} дн.`;
+            } else if (
+              latestWellbeing !== null &&
+              latestWellbeing <= LOW_WELLBEING
+            ) {
+              attentionReason = "low_wellbeing";
+              attentionLabel = `Самопочуття ${latestWellbeing}/10`;
+            } else if (gainedWeight) {
+              const gain = recentWeights[0] - recentWeights[1];
+              attentionReason = "weight_gain";
+              attentionLabel = `+${gain.toFixed(1).replace(".", ",")} кг за тиждень`;
+            } else if (
+              daysToCycleEnd !== null &&
+              daysToCycleEnd >= 0 &&
+              daysToCycleEnd <= CYCLE_ENDING_DAYS
+            ) {
+              attentionReason = "cycle_ending";
+              attentionLabel =
+                daysToCycleEnd === 0
+                  ? "Цикл завершується сьогодні"
+                  : `Цикл завершується через ${daysToCycleEnd} дн.`;
+            }
+          }
+
+          const needsAttention = attentionReason !== null;
 
           return {
             patientId: patient.id,
@@ -139,6 +213,10 @@ export function useDoctorPatients() {
             weightDelta,
             lastCheckinDate,
             needsAttention,
+            attentionReason,
+            attentionLabel,
+            latestWellbeing,
+            daysToCycleEnd,
           };
         });
     },
