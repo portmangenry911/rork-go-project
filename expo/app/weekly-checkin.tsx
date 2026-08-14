@@ -62,6 +62,25 @@ function parseMeasure(text: string): number | null {
   return Number.isFinite(num) && num > 0 ? num : null;
 }
 
+/**
+ * Wide sanity bounds. These are not clinical limits — they only catch typos
+ * such as a dropped digit (22 instead of 122) that would wreck the charts.
+ */
+const MEASURE_MIN = 30;
+const MEASURE_MAX = 250;
+
+/** Returns an error message when the raw text is present but implausible. */
+function measureError(text: string, label: string): string | null {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return null;
+  const value = parseMeasure(trimmed);
+  if (value === null) return `${label}: введіть число`;
+  if (value < MEASURE_MIN || value > MEASURE_MAX) {
+    return `${label}: перевірте значення (${MEASURE_MIN}–${MEASURE_MAX} см)`;
+  }
+  return null;
+}
+
 export default function WeeklyCheckinScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -79,6 +98,8 @@ export default function WeeklyCheckinScreen() {
   const [step, setStep] = useState<number>(1);
   const [weight, setWeight] = useState<number>(prevWeight ?? 80.0);
   const [weightReady, setWeightReady] = useState<boolean>(false);
+  const [stepError, setStepError] = useState<string | null>(null);
+  const [weightConfirmed, setWeightConfirmed] = useState<boolean>(false);
   const [waist, setWaist] = useState<string>("");
   const [hips, setHips] = useState<string>("");
   const [abdomen, setAbdomen] = useState<string>("");
@@ -261,12 +282,37 @@ export default function WeeklyCheckinScreen() {
   }>({ weekDelta: null, cycleDelta: null });
 
   const goNext = () => {
+    if (step === 1) {
+      const jump = prevWeight !== null ? Math.abs(weight - prevWeight) : 0;
+      // Large swings are possible but usually a mis-scroll — ask once.
+      if (jump > 5 && !weightConfirmed) {
+        setWeightConfirmed(true);
+        setStepError(
+          `Різниця ${jump.toFixed(1).replace(".", ",")} кг за тиждень. Перевірте значення й натисніть «Далі» ще раз.`,
+        );
+        return;
+      }
+    }
+
+    if (step === 2) {
+      const firstError =
+        measureError(waist, "Талія") ??
+        measureError(hips, "Стегна") ??
+        measureError(abdomen, "Живіт");
+      if (firstError !== null) {
+        setStepError(firstError);
+        return;
+      }
+    }
+
     lightTap();
+    setStepError(null);
     setStep((prev) => Math.min(prev + 1, 5));
   };
 
   const goBack = () => {
     lightTap();
+    setStepError(null);
     setStep((prev) => Math.max(prev - 1, 1));
   };
 
@@ -385,7 +431,12 @@ export default function WeeklyCheckinScreen() {
                 <WeightRuler
                   testID="weight-ruler"
                   value={weight}
-                  onChange={setWeight}
+                  onChange={(next: number) => {
+                    setWeight(next);
+                    // A fresh adjustment means the warning must be earned again.
+                    setWeightConfirmed(false);
+                    setStepError(null);
+                  }}
                 />
                 <Text style={styles.rulerHint}>
                   Проведіть пальцем вліво/вправо, щоб змінити вагу
@@ -398,6 +449,12 @@ export default function WeeklyCheckinScreen() {
                 )}
               </View>
             </View>
+          )}
+
+          {step === 1 && stepError !== null && (
+            <Text style={styles.stepError} testID="weight-warning">
+              {stepError}
+            </Text>
           )}
 
           {step === 2 && (
@@ -425,6 +482,11 @@ export default function WeeklyCheckinScreen() {
                   <Text style={styles.measureUnit}>см</Text>
                 </View>
               ))}
+              {stepError !== null && (
+                <Text style={styles.stepError} testID="measure-error">
+                  {stepError}
+                </Text>
+              )}
             </View>
           )}
 
@@ -763,6 +825,14 @@ const styles = StyleSheet.create({
     color: colors.tealDeep,
     textAlign: "center",
     marginTop: 16,
+  },
+  stepError: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.gold,
+    marginTop: 14,
+    textAlign: "center",
   },
   measureRow: {
     flexDirection: "row",
