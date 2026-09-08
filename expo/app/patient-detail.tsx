@@ -189,6 +189,8 @@ export default function PatientDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [chartWidth, setChartWidth] = useState<number>(0);
+    // Only the two latest capture sessions are shown by default.
+  const [showAllPhotos, setShowAllPhotos] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
@@ -309,9 +311,7 @@ export default function PatientDetailScreen() {
   const daily = dailyQuery.data ?? [];
   const photos = photosQuery.data ?? [];
 
-  // Only the two latest capture sessions are shown by default — a long cycle
-  // can hold dozens of shots and the doctor rarely scrolls past the recent ones.
-  const [showAllPhotos, setShowAllPhotos] = useState<boolean>(false);
+
   const sessionOrder: string[] = [];
   photos.forEach((photo) => {
     const key = photo.weekly_checkin_id ?? `date:${photo.photo_date ?? ""}`;
