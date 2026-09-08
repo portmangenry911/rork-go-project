@@ -22,6 +22,7 @@ import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme
 import { usePatientHome } from "@/hooks/usePatientHome";
 import {
   getDoctorUserIdForPatient,
+  isDoctorNotificationEnabled,
   pushNotification,
 } from "@/hooks/useNotifications";
 import { supabase } from "@/lib/supabase";
@@ -70,27 +71,39 @@ async function notifyDoctorOfDailyCheckin(
   patientName: string,
   wellbeing: number,
 ): Promise<void> {
-  const doctorUserId = await getDoctorUserIdForPatient(patientId);
-  if (doctorUserId === null) return;
+  const doctor = await getDoctorUserIdForPatient(patientId);
+  if (doctor === null) return;
 
   const link = `/patient-detail?id=${patientId}`;
 
-  await pushNotification({
-    recipientUserId: doctorUserId,
-    kind: "checkin",
-    title: patientName,
-    body: `Щоденний чек-ін · самопочуття ${wellbeing}/10`,
-    link,
-  });
-
-  if (wellbeing <= 3) {
+  const checkinsEnabled = await isDoctorNotificationEnabled(
+    doctor.doctorProfileId,
+    "checkins_enabled",
+  );
+  if (checkinsEnabled) {
     await pushNotification({
-      recipientUserId: doctorUserId,
+      recipientUserId: doctor.userId,
       kind: "checkin",
       title: patientName,
-      body: `Самопочуття ${wellbeing}/10 — потребує уваги`,
+      body: `Щоденний чек-ін · самопочуття ${wellbeing}/10`,
       link,
     });
+  }
+
+  if (wellbeing <= 3) {
+    const alertsEnabled = await isDoctorNotificationEnabled(
+      doctor.doctorProfileId,
+      "alerts_enabled",
+    );
+    if (alertsEnabled) {
+      await pushNotification({
+        recipientUserId: doctor.userId,
+        kind: "checkin",
+        title: patientName,
+        body: `Самопочуття ${wellbeing}/10 — потребує уваги`,
+        link,
+      });
+    }
   }
 }
 

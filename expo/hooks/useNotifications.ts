@@ -93,19 +93,55 @@ export async function pushNotification(input: {
   if (error) console.log("[notifications] insert failed:", error.message);
 }
 
-/** Resolves the auth user_id of a patient's active doctor, or null if none. */
+export interface DoctorContact {
+  /** doctor_profiles.id — used to look up doctor_notification_settings. */
+  doctorProfileId: string;
+  /** auth user id — used as the notification recipient. */
+  userId: string;
+}
+
+/** Resolves a patient's active doctor (profile id + auth user id), or null. */
 export async function getDoctorUserIdForPatient(
   patientId: string,
-): Promise<string | null> {
+): Promise<DoctorContact | null> {
   const { data, error } = await supabase
     .from("doctor_patient_relations")
-    .select("doctor:doctor_profiles(user_id)")
+    .select("doctor_id, doctor:doctor_profiles(user_id)")
     .eq("patient_id", patientId)
     .eq("status", "active")
     .maybeSingle();
   if (error || data === null) return null;
   const doctor = data.doctor as unknown as { user_id: string } | null;
-  return doctor?.user_id ?? null;
+  const doctorProfileId = data.doctor_id as string | undefined;
+  if (doctor?.user_id === undefined || doctorProfileId === undefined) {
+    return null;
+  }
+  return { doctorProfileId, userId: doctor.user_id };
+}
+
+export type DoctorNotificationSetting =
+  | "checkins_enabled"
+  | "messages_enabled"
+  | "alerts_enabled";
+
+/**
+ * True when the doctor has this notification category enabled. Missing
+ * settings row (doctor never opened the settings screen) defaults to true.
+ */
+export async function isDoctorNotificationEnabled(
+  doctorProfileId: string,
+  setting: DoctorNotificationSetting,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("doctor_notification_settings")
+    .select(setting)
+    .eq("doctor_id", doctorProfileId)
+    .maybeSingle();
+  if (error || data === null) return true;
+  const value = (data as Record<DoctorNotificationSetting, boolean | null>)[
+    setting
+  ];
+  return value ?? true;
 }
 
 /** Resolves the auth user_id behind a patient_profiles row, or null if none. */

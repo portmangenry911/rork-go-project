@@ -16,7 +16,10 @@ import { colors, fonts, softShadow } from "@/constants/theme";
 import { useConversationMessages } from "@/hooks/useChat";
 import type { ChatMessage } from "@/hooks/useChat";
 import { supabase } from "@/lib/supabase";
-import { pushNotification } from "@/hooks/useNotifications";
+import {
+  isDoctorNotificationEnabled,
+  pushNotification,
+} from "@/hooks/useNotifications";
 
 interface ChatThreadProps {
   conversationId: string;
@@ -82,6 +85,15 @@ export default function ChatThread({
       console.log("[notify] me", myUserId, "doctor", doctorUser, "patient", patientUser, "recipient", recipient);
       console.log("[notify] errors", doctorRes.error?.message, patientRes.error?.message);
       if (recipient === null) return;
+
+      if (!iAmDoctor) {
+        // Recipient is the doctor — respect their notification settings.
+        const messagesEnabled = await isDoctorNotificationEnabled(
+          convo.doctor_id as string,
+          "messages_enabled",
+        );
+        if (!messagesEnabled) return;
+      }
 
       const sender = iAmDoctor ? doctorRes.data : patientRes.data;
       const senderName =
