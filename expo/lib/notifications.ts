@@ -4,8 +4,12 @@
  * Everything here is scheduled on-device: no push credentials, no server.
  * Web is a no-op because expo-notifications has no scheduling API there.
  */
+import { isRunningInExpoGo } from "expo";
+import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+
+import { supabase } from "@/lib/supabase";
 
 export interface ReminderSettings {
   daily_enabled: boolean;
@@ -202,4 +206,57 @@ export async function skipTodaysDaily(): Promise<void> {
 export async function cancelAllReminders(): Promise<void> {
   if (!isSupported()) return;
   await clearOurs();
+}
+
+/**
+ * Fetches this device's Expo push token and upserts it for the given user.
+ *
+ * No-op on web and on Android + Expo Go (Expo dropped that combo in SDK 53).
+ * On iOS Expo Go the token is issued but cannot receive pushes (that needs a
+ * dev/standalone build with credentials) — expected while the server-side
+ * push infrastructure is being prepared ahead of time.
+ */
+export async function registerPushToken(userId: string): Promise<void> {
+  if (!isSupported()) return;
+
+  // Expo Go on Android dropped remote-notification support in SDK 53 —
+  // getExpoPushTokenAsync() throws unconditionally there. Skip with a clear
+  // log instead of letting that throw look like a real failure; a dev build
+  // is required to get a token on Android.
+  if (Platform.OS === "android" && isRunningInExpoGo()) {
+    console.log(
+      "[push] skipped: Android + Expo Go does not support push tokens (needs a dev build)",
+    );
+    return;
+  }
+
+  try {
+    const allowed = await ensurePermission();
+    if (!allowed) return;
+
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId as
+      | string
+      | undefined;
+    const { data: token } = await Notifications.getExpoPushTokenAsync(
+      projectId !== undefined ? { projectId } : undefined,
+    );
+
+    const platform = Platform.OS === "ios" ? "ios" : "android";
+
+    const { error } = await supabase.from("push_tokens").upsert(
+      {
+        user_id: userId,
+        token,
+        platform,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "token" },
+    );
+
+    if (error) {
+      console.error("[push] failed to save push token", error);
+    }
+  } catch (err) {
+    console.error("[push] registerPushToken failed", err);
+  }
 }

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { registerPushToken } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
 import type { UserRole } from "@/types/db";
 
@@ -43,6 +44,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   }, []);
 
   const userId = session?.user?.id ?? null;
+
+  useEffect(() => {
+    if (userId === null) return;
+    registerPushToken(userId).catch((err: unknown) => {
+      console.error("[auth] registerPushToken failed", err);
+    });
+  }, [userId]);
 
   const roleQuery = useQuery({
     queryKey: ["user-role", userId],

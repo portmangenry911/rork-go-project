@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
@@ -27,6 +28,8 @@ import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme
 import { useDoctorHome } from "@/hooks/useDoctorHome";
 import { pushNotification } from "@/hooks/useNotifications";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/providers/AuthProvider";
+import { todayISO } from "@/utils/dates";
 import {
   useDoctorPatients,
   type DoctorPatientItem,
@@ -37,9 +40,29 @@ const PLAN_LIMIT = 15;
 export default function DoctorHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { userId } = useAuth();
   const { profile, relations, isLoading } = useDoctorHome();
   const { patients } = useDoctorPatients();
   const flagged = patients.filter((p) => p.needsAttention);
+
+  const consultationsToday = patients.filter(
+    (p) => p.lastCheckinDate === todayISO(),
+  ).length;
+
+  const newQuestionsQuery = useQuery({
+    queryKey: ["doctor-new-questions", userId],
+    enabled: userId !== null,
+    queryFn: async (): Promise<number> => {
+      const { count, error } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("recipient_user_id", userId as string)
+        .eq("kind", "message")
+        .eq("is_read", false);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
 
   if (isLoading) {
     return (
@@ -89,9 +112,6 @@ export default function DoctorHomeScreen() {
           <Text style={styles.planTitle}>
             Professional · {activeCount} / {PLAN_LIMIT} пацієнтів
           </Text>
-          <Pressable hitSlop={8}>
-            <Text style={styles.planLink}>Керувати</Text>
-          </Pressable>
         </View>
         <View style={styles.planTrack}>
           <LinearGradient
@@ -109,11 +129,11 @@ export default function DoctorHomeScreen() {
           <Text style={styles.statLabel}>Активні пацієнти</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statNumber}>0</Text>
+          <Text style={styles.statNumber}>{consultationsToday}</Text>
           <Text style={styles.statLabel}>Консультації сьогодні</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statNumber}>0</Text>
+          <Text style={styles.statNumber}>{newQuestionsQuery.data ?? 0}</Text>
           <Text style={styles.statLabel}>Нові питання</Text>
         </View>
         <View style={styles.statCard}>
