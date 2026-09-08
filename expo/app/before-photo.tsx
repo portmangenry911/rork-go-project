@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
     borderColor: colors.teal,
   },
   photoImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   photoCheck: {
     position: "absolute",

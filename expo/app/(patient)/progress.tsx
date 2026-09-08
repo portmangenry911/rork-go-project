@@ -781,7 +781,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   photoImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   photoTag: {
     position: "absolute",
