@@ -25,6 +25,8 @@ import AvatarInitials from "@/components/AvatarInitials";
 import NotificationBell from "@/components/NotificationBell";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { useDoctorHome } from "@/hooks/useDoctorHome";
+import { pushNotification } from "@/hooks/useNotifications";
+import { supabase } from "@/lib/supabase";
 import {
   useDoctorPatients,
   type DoctorPatientItem,
@@ -217,6 +219,7 @@ function actionFor(item: DoctorPatientItem): ActionSpec {
 /** One flagged patient: reason on the left, one contextual action on the right. */
 function AttentionRow({ item }: { item: DoctorPatientItem }) {
   const router = useRouter();
+  const [pinged, setPinged] = React.useState<boolean>(false);
   const action = actionFor(item);
   const fullName = `${item.firstName} ${item.lastName}`;
 
@@ -229,6 +232,34 @@ function AttentionRow({ item }: { item: DoctorPatientItem }) {
       router.push("/create-cycle");
       return;
     }
+
+    // A silent patient gets a one-tap nudge instead of a full chat detour.
+    if (item.attentionReason === "no_checkin") {
+      if (pinged) return;
+      setPinged(true);
+      void (async () => {
+        const { data } = await supabase
+          .from("patient_profiles")
+          .select("user_id")
+          .eq("id", item.patientId)
+          .maybeSingle();
+        const recipient = data?.user_id ?? null;
+        if (recipient === null) {
+          setPinged(false);
+          return;
+        }
+
+        await pushNotification({
+          recipientUserId: recipient as string,
+          kind: "checkin",
+          title: "Лікар нагадує про чек-ін",
+          body: "Відмітьте самопочуття — це займе хвилину.",
+          link: "/(patient)/home",
+        });
+      })();
+      return;
+    }
+
     router.push({
       pathname: "/chat-thread",
       params: { patientId: item.patientId, name: fullName },
@@ -258,11 +289,23 @@ function AttentionRow({ item }: { item: DoctorPatientItem }) {
 
       <Pressable
         onPress={runAction}
-        style={({ pressed }) => [styles.actionChip, pressed && styles.pressed]}
+        style={({ pressed }) => [
+          styles.actionChip,
+          pinged && styles.actionChipDone,
+          pressed && styles.pressed,
+        ]}
         testID={`attention-action-${item.patientId}`}
       >
-        {action.icon}
-        <Text style={styles.actionChipText}>{action.label}</Text>
+        {pinged ? (
+          <CheckCircle2 size={15} color={colors.tealDeep} strokeWidth={2} />
+        ) : (
+          action.icon
+        )}
+        <Text
+          style={[styles.actionChipText, pinged && styles.actionChipTextDone]}
+        >
+          {pinged ? "Надіслано" : action.label}
+        </Text>
       </Pressable>
     </View>
   );
@@ -442,7 +485,6 @@ const styles = StyleSheet.create({
   attentionRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
     paddingVertical: 13,
     gap: 10,
   },
@@ -469,10 +511,17 @@ const styles = StyleSheet.create({
     borderColor: colors.navy,
     backgroundColor: colors.card,
   },
+  actionChipDone: {
+    borderColor: colors.teal,
+    backgroundColor: colors.mint,
+  },
   actionChipText: {
     fontFamily: fonts.semibold,
     fontSize: 12.5,
     color: colors.navy,
+  },
+  actionChipTextDone: {
+    color: colors.tealDeep,
   },
   allClearCard: {
     flexDirection: "row",
