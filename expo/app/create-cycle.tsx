@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PrimaryButton from "@/components/PrimaryButton";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { useDoctorHome } from "@/hooks/useDoctorHome";
+import { getPatientUserId, pushNotification } from "@/hooks/useNotifications";
 import { supabase } from "@/lib/supabase";
 
 type GoalType = "weight" | "lab_marker" | "course_completion" | "custom";
@@ -52,6 +53,35 @@ function formatDisplayDate(date: Date): string {
 function parseNumber(text: string): number | null {
   const value = parseFloat(text.replace(",", "."));
   return Number.isFinite(value) ? value : null;
+}
+
+function formatISOForDisplay(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+
+/** Notifies the patient that their doctor has started a new therapy cycle. */
+async function notifyPatientOfNewCycle(
+  patientProfileId: string,
+  protocolName: string,
+  start: string,
+  end: string | null,
+): Promise<void> {
+  const patientUserId = await getPatientUserId(patientProfileId);
+  if (patientUserId === null) return;
+
+  const dates =
+    end !== null
+      ? `${formatISOForDisplay(start)} – ${formatISOForDisplay(end)}`
+      : `з ${formatISOForDisplay(start)}`;
+
+  await pushNotification({
+    recipientUserId: patientUserId,
+    kind: "cycle",
+    title: "Розпочато новий цикл терапії",
+    body: `${protocolName} · ${dates}`,
+    link: "/(patient)/home",
+  });
 }
 
 export default function CreateCycleScreen() {
@@ -97,7 +127,7 @@ export default function CreateCycleScreen() {
     patients.find((rel) => rel.patient?.id === selectedPatientId) ?? null;
 
   const createCycle = useMutation({
-    mutationFn: async (): Promise<void> => {
+    mutationFn: async (): Promise<{ start: string; end: string | null }> => {
       if (doctorId === null) throw new Error("Профіль лікаря не знайдено.");
       if (selectedPatientId === null) throw new Error("Оберіть пацієнта.");
 
@@ -146,11 +176,21 @@ export default function CreateCycleScreen() {
       if (insertError) {
         throw new Error(`Не вдалося створити цикл: ${insertError.message}`);
       }
+
+      return { start, end };
     },
-    onSuccess: () => {
+    onSuccess: ({ start, end }) => {
       setIsCreated(true);
       queryClient.invalidateQueries({ queryKey: ["doctor-active-patients"] });
       queryClient.invalidateQueries({ queryKey: ["patient-active-cycle"] });
+      if (selectedPatientId !== null) {
+        void notifyPatientOfNewCycle(
+          selectedPatientId,
+          protocolName.trim(),
+          start,
+          end,
+        );
+      }
     },
     onError: (err: unknown) => {
       setError(

@@ -107,3 +107,16 @@ export async function getDoctorUserIdForPatient(
   const doctor = data.doctor as unknown as { user_id: string } | null;
   return doctor?.user_id ?? null;
 }
+
+/** Resolves the auth user_id behind a patient_profiles row, or null if none. */
+export async function getPatientUserId(
+  patientProfileId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("patient_profiles")
+    .select("user_id")
+    .eq("id", patientProfileId)
+    .maybeSingle();
+  if (error || data === null) return null;
+  return (data.user_id as string | undefined) ?? null;
+}
