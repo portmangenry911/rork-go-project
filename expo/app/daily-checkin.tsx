@@ -20,6 +20,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { usePatientHome } from "@/hooks/usePatientHome";
+import {
+  getDoctorUserIdForPatient,
+  pushNotification,
+} from "@/hooks/useNotifications";
 import { supabase } from "@/lib/supabase";
 import { skipTodaysDaily } from "@/lib/notifications";
 
@@ -56,6 +60,37 @@ function countStreak(dates: string[]): number {
 function lightTap() {
   if (Platform.OS !== "web") {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
+}
+
+/** Notifies the patient's doctor about a completed daily check-in, plus a
+ * separate alert when wellbeing is low enough to need attention. */
+async function notifyDoctorOfDailyCheckin(
+  patientId: string,
+  patientName: string,
+  wellbeing: number,
+): Promise<void> {
+  const doctorUserId = await getDoctorUserIdForPatient(patientId);
+  if (doctorUserId === null) return;
+
+  const link = `/patient-detail?id=${patientId}`;
+
+  await pushNotification({
+    recipientUserId: doctorUserId,
+    kind: "checkin",
+    title: patientName,
+    body: `Щоденний чек-ін · самопочуття ${wellbeing}/10`,
+    link,
+  });
+
+  if (wellbeing <= 3) {
+    await pushNotification({
+      recipientUserId: doctorUserId,
+      kind: "checkin",
+      title: patientName,
+      body: `Самопочуття ${wellbeing}/10 — потребує уваги`,
+      link,
+    });
   }
 }
 
@@ -185,6 +220,8 @@ export default function DailyCheckinScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, cycle, isLoading } = usePatientHome();
+  const patientFullName =
+    profile !== null ? `${profile.first_name} ${profile.last_name}`.trim() : "";
 
   const [step, setStep] = useState<number>(1);
   const [wellbeing, setWellbeing] = useState<number>(8);
@@ -260,6 +297,9 @@ export default function DailyCheckinScreen() {
       setIsSaved(true);
       // Today's job is done — drop the pending reminder so it stays quiet.
       void skipTodaysDaily();
+      if (profile !== null) {
+        void notifyDoctorOfDailyCheckin(profile.id, patientFullName, wellbeing);
+      }
     },
     onError: (err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);

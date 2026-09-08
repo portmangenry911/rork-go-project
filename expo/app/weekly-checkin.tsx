@@ -23,6 +23,10 @@ import GradientSlider from "@/components/GradientSlider";
 import WeightRuler from "@/components/WeightRuler";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { usePatientHome } from "@/hooks/usePatientHome";
+import {
+  getDoctorUserIdForPatient,
+  pushNotification,
+} from "@/hooks/useNotifications";
 import { supabase } from "@/lib/supabase";
 import { skipTodaysDaily } from "@/lib/notifications";
 import { useAuth } from "@/providers/AuthProvider";
@@ -47,6 +51,38 @@ interface PickedPhoto {
 function lightTap() {
   if (Platform.OS !== "web") {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
+}
+
+/** Notifies the patient's doctor about a completed weekly check-in, plus a
+ * separate alert when wellbeing is low enough to need attention. */
+async function notifyDoctorOfWeeklyCheckin(
+  patientId: string,
+  patientName: string,
+  weightKg: number,
+  wellbeing: number,
+): Promise<void> {
+  const doctorUserId = await getDoctorUserIdForPatient(patientId);
+  if (doctorUserId === null) return;
+
+  const link = `/patient-detail?id=${patientId}`;
+
+  await pushNotification({
+    recipientUserId: doctorUserId,
+    kind: "checkin",
+    title: patientName,
+    body: `Щотижневий чек-ін · вага ${formatKg(weightKg)} кг`,
+    link,
+  });
+
+  if (wellbeing <= 3) {
+    await pushNotification({
+      recipientUserId: doctorUserId,
+      kind: "checkin",
+      title: patientName,
+      body: `Самопочуття ${wellbeing}/10 — потребує уваги`,
+      link,
+    });
   }
 }
 
@@ -88,6 +124,8 @@ export default function WeeklyCheckinScreen() {
   const queryClient = useQueryClient();
   const { userId } = useAuth();
   const { profile, cycle, latestCheckin, isLoading } = usePatientHome();
+  const patientFullName =
+    profile !== null ? `${profile.first_name} ${profile.last_name}`.trim() : "";
 
   const weekNumber =
     cycle?.start_date != null
@@ -267,6 +305,14 @@ export default function WeeklyCheckinScreen() {
       setIsDuplicate(result.isRepeat);
       setIsSaved(true);
       void skipTodaysDaily();
+      if (profile !== null) {
+        void notifyDoctorOfWeeklyCheckin(
+          profile.id,
+          patientFullName,
+          weight,
+          wellbeing,
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["weekly-checkins"] });
       queryClient.invalidateQueries({ queryKey: ["latest-checkin"] });
       queryClient.invalidateQueries({ queryKey: ["progress-photos"] });

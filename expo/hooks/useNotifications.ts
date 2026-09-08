@@ -92,3 +92,18 @@ export async function pushNotification(input: {
   });
   if (error) console.log("[notifications] insert failed:", error.message);
 }
+
+/** Resolves the auth user_id of a patient's active doctor, or null if none. */
+export async function getDoctorUserIdForPatient(
+  patientId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("doctor_patient_relations")
+    .select("doctor:doctor_profiles(user_id)")
+    .eq("patient_id", patientId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error || data === null) return null;
+  const doctor = data.doctor as unknown as { user_id: string } | null;
+  return doctor?.user_id ?? null;
+}
