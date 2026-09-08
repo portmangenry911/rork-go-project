@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { LogOut, Pencil } from "lucide-react-native";
+import { Bell, LogOut, Pencil } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -332,6 +332,15 @@ export default function DoctorProfileScreen() {
             </View>
 
             <Pressable
+              testID="doctor-notifications-link"
+              onPress={() => router.push("/doctor-notifications")}
+              style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+            >
+              <Bell size={18} color={colors.navy} strokeWidth={2} />
+              <Text style={styles.menuItemText}>Сповіщення</Text>
+            </Pressable>
+
+            <Pressable
               testID="sign-out-button"
               onPress={handleSignOut}
               disabled={isSigningOut}
@@ -528,6 +537,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.amber,
     marginTop: 14,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+  },
+  menuItemText: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.navy,
   },
   signOut: {
     flexDirection: "row",
