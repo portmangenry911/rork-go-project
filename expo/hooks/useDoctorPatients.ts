@@ -39,7 +39,7 @@ export type AttentionReason =
 /** Days without a check-in before the patient is flagged. */
 const CHECKIN_GRACE_DAYS = 3;
 /** Wellbeing at or below this counts as a warning sign. */
-const LOW_WELLBEING = 3;
+const LOW_WELLBEING = 4;
 /** Cycle is treated as ending when this few days remain. */
 const CYCLE_ENDING_DAYS = 3;
 
