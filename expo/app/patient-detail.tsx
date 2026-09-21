@@ -1,10 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Print from "expo-print";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import {
   ArrowLeft,
+  Check,
   ChevronLeft,
   ChevronRight,
   FileDown,
@@ -184,9 +185,18 @@ function sortProgressPhotos(rows: ProgressPhoto[]): ProgressPhoto[] {
   });
 }
 
+type CycleOutcome = "achieved" | "partially" | "not_achieved";
+
+const OUTCOME_OPTIONS: { key: CycleOutcome; label: string }[] = [
+  { key: "achieved", label: "Досягнуто" },
+  { key: "partially", label: "Частково" },
+  { key: "not_achieved", label: "Не досягнуто" },
+];
+
 export default function PatientDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [chartWidth, setChartWidth] = useState<number>(0);
     // Only the two latest capture sessions are shown by default.
@@ -194,6 +204,11 @@ export default function PatientDetailScreen() {
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [isCompleteModalOpen, setIsCompleteModalOpen] =
+    useState<boolean>(false);
+  const [selectedOutcome, setSelectedOutcome] = useState<CycleOutcome | null>(
+    null,
+  );
   const { profile: doctorProfile } = useDoctorHome();
 
   const patientQuery = useQuery({
@@ -288,6 +303,37 @@ export default function PatientDetailScreen() {
         }),
       );
       return signed;
+    },
+  });
+
+  const completeCycle = useMutation({
+    mutationFn: async (outcome: CycleOutcome): Promise<void> => {
+      const activeCycleId = cycleQuery.data?.id;
+      if (activeCycleId === undefined) {
+        throw new Error("Активний цикл не знайдено.");
+      }
+      const { error } = await supabase
+        .from("therapy_cycles")
+        .update({
+          status: "completed",
+          outcome,
+          actual_end: todayISO(),
+        })
+        .eq("id", activeCycleId);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      setIsCompleteModalOpen(false);
+      setSelectedOutcome(null);
+      void queryClient.invalidateQueries({
+        queryKey: ["doctor-patient-cycle", id],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["doctor-active-patients"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["doctor-patients-enriched"],
+      });
     },
   });
 
@@ -526,6 +572,21 @@ export default function PatientDetailScreen() {
                     ]}
                   />
                 </View>
+                <Pressable
+                  testID="complete-cycle-button"
+                  onPress={() => {
+                    setSelectedOutcome(null);
+                    setIsCompleteModalOpen(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.completeCycleButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.completeCycleButtonText}>
+                    Завершити цикл
+                  </Text>
+                </Pressable>
               </View>
             ) : (
               <View style={styles.cycleCard}>
@@ -670,6 +731,95 @@ export default function PatientDetailScreen() {
                 )}
               </>
             )}
+
+            <Modal
+              visible={isCompleteModalOpen}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setIsCompleteModalOpen(false)}
+            >
+              <View style={styles.completeOverlay}>
+                <View style={styles.completeCard} testID="complete-cycle-modal">
+                  <Text style={styles.completeTitle}>Завершити цикл</Text>
+                  <Text style={styles.completeSubtitle}>
+                    Оберіть результат терапії
+                  </Text>
+
+                  {OUTCOME_OPTIONS.map((option) => {
+                    const selected = selectedOutcome === option.key;
+                    return (
+                      <Pressable
+                        key={option.key}
+                        testID={`outcome-option-${option.key}`}
+                        onPress={() => setSelectedOutcome(option.key)}
+                        style={[
+                          styles.outcomeRow,
+                          selected && styles.outcomeRowSelected,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.outcomeRadio,
+                            selected && styles.outcomeRadioSelected,
+                          ]}
+                        >
+                          {selected && (
+                            <Check size={13} color="#FFFFFF" strokeWidth={3} />
+                          )}
+                        </View>
+                        <Text style={styles.outcomeLabel}>{option.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+
+                  {completeCycle.isError && (
+                    <Text style={styles.completeError} testID="complete-cycle-error">
+                      {completeCycle.error instanceof Error
+                        ? completeCycle.error.message
+                        : "Не вдалося завершити цикл."}
+                    </Text>
+                  )}
+
+                  <View style={styles.completeActions}>
+                    <Pressable
+                      testID="complete-cycle-cancel"
+                      onPress={() => setIsCompleteModalOpen(false)}
+                      style={({ pressed }) => [
+                        styles.completeCancelButton,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.completeCancelText}>Скасувати</Text>
+                    </Pressable>
+                    <Pressable
+                      testID="complete-cycle-confirm"
+                      onPress={() => {
+                        if (selectedOutcome !== null) {
+                          completeCycle.mutate(selectedOutcome);
+                        }
+                      }}
+                      disabled={
+                        selectedOutcome === null || completeCycle.isPending
+                      }
+                      style={({ pressed }) => [
+                        styles.completeConfirmButton,
+                        (selectedOutcome === null || completeCycle.isPending) &&
+                          styles.completeConfirmDisabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      {completeCycle.isPending ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.completeConfirmText}>
+                          Підтвердити
+                        </Text>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </Modal>
 
             <Modal
               visible={viewerIndex !== null}
@@ -897,6 +1047,114 @@ const styles = StyleSheet.create({
   progressFill: {
     height: 8,
     borderRadius: 4,
+  },
+  completeCycleButton: {
+    alignSelf: "flex-start",
+    marginTop: 14,
+    paddingHorizontal: 14,
+    height: 36,
+    borderRadius: radius.pill,
+    borderWidth: 1.2,
+    borderColor: colors.navy,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  completeCycleButtonText: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+    color: colors.navy,
+  },
+  completeOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+  completeCard: {
+    alignSelf: "stretch",
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    padding: 22,
+    ...cardShadow,
+  },
+  completeTitle: {
+    fontFamily: fonts.serif,
+    fontSize: 21,
+    color: colors.ink,
+  },
+  completeSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 13.5,
+    color: colors.sub,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  outcomeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  outcomeRowSelected: {},
+  outcomeRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.6,
+    borderColor: colors.hairline,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  outcomeRadioSelected: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal,
+  },
+  outcomeLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  completeError: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.amber,
+    marginTop: 8,
+  },
+  completeActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18,
+  },
+  completeCancelButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: radius.button,
+    backgroundColor: colors.paper,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  completeCancelText: {
+    fontFamily: fonts.bold,
+    fontSize: 14.5,
+    color: colors.sub,
+  },
+  completeConfirmButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: radius.button,
+    backgroundColor: colors.navy,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  completeConfirmDisabled: {
+    opacity: 0.5,
+  },
+  completeConfirmText: {
+    fontFamily: fonts.bold,
+    fontSize: 14.5,
+    color: "#FFFFFF",
   },
   summaryCard: {
     backgroundColor: colors.mint,
