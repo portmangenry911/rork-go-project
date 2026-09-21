@@ -20,7 +20,7 @@ import { useAuth } from "@/providers/AuthProvider";
  * verification_status review, no admin role in the schema. Single hardcoded
  * operator email — see task history for why (no admin table in v1 scope).
  */
-const OPERATOR_EMAIL = "zavrus@gmail.com";
+const OPERATOR_EMAIL = "doc1@gmail.com";
 
 type VerificationStatus = "pending" | "verified" | "rejected" | "suspended";
 
