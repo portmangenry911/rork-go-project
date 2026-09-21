@@ -21,6 +21,8 @@ import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 
+type VerificationStatus = "pending" | "verified" | "rejected" | "suspended";
+
 interface DoctorProfileRow {
   id: string;
   user_id: string;
@@ -29,8 +31,26 @@ interface DoctorProfileRow {
   specialization: string | null;
   city: string | null;
   is_founding_doctor: boolean | null;
+  founding_joined_at?: string | null;
+  verification_status?: VerificationStatus | null;
   bio?: string | null;
   work_format?: string | null;
+}
+
+const VERIFICATION_LABELS: Record<VerificationStatus, string> = {
+  pending: "На верифікації",
+  verified: "Верифіковано",
+  rejected: "Відхилено",
+  suspended: "Призупинено",
+};
+
+/** Founding Doctor free Professional period is 6 months from signing. */
+function formatFoundingExpiry(foundingJoinedAt: string): string {
+  const d = new Date(foundingJoinedAt);
+  d.setMonth(d.getMonth() + 6);
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}.${month}.${d.getFullYear()}`;
 }
 
 type WorkFormat = "online" | "offline" | "both";
@@ -304,11 +324,46 @@ export default function DoctorProfileScreen() {
                   .filter((v) => v !== null && v !== undefined && v.length > 0)
                   .join(" · ") || "—"}
               </Text>
+              {profile?.verification_status !== null &&
+                profile?.verification_status !== undefined && (
+                  <View
+                    style={[
+                      styles.verificationPill,
+                      profile.verification_status === "verified" &&
+                        styles.verificationPillVerified,
+                      (profile.verification_status === "rejected" ||
+                        profile.verification_status === "suspended") &&
+                        styles.verificationPillNegative,
+                    ]}
+                    testID="verification-status-pill"
+                  >
+                    <Text
+                      style={[
+                        styles.verificationPillText,
+                        profile.verification_status === "verified" &&
+                          styles.verificationPillTextVerified,
+                        (profile.verification_status === "rejected" ||
+                          profile.verification_status === "suspended") &&
+                          styles.verificationPillTextNegative,
+                      ]}
+                    >
+                      {VERIFICATION_LABELS[profile.verification_status]}
+                    </Text>
+                  </View>
+                )}
               {profile?.is_founding_doctor === true && (
                 <View style={styles.foundingBadge} testID="founding-badge">
                   <Text style={styles.foundingText}>Founding Doctor</Text>
                 </View>
               )}
+              {profile?.is_founding_doctor === true &&
+                profile.founding_joined_at !== null &&
+                profile.founding_joined_at !== undefined && (
+                  <Text style={styles.foundingExpiry} testID="founding-expiry">
+                    Professional безкоштовно до{" "}
+                    {formatFoundingExpiry(profile.founding_joined_at)}
+                  </Text>
+                )}
               {profile?.bio !== null &&
                 profile?.bio !== undefined &&
                 profile.bio.length > 0 && (
@@ -430,6 +485,36 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 12,
     color: colors.gold,
+  },
+  foundingExpiry: {
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    color: colors.sub,
+    marginTop: 6,
+  },
+  verificationPill: {
+    backgroundColor: colors.hairline,
+    borderRadius: radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    marginTop: 12,
+  },
+  verificationPillVerified: {
+    backgroundColor: colors.mint,
+  },
+  verificationPillNegative: {
+    backgroundColor: "#FDE2E1",
+  },
+  verificationPillText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.sub,
+  },
+  verificationPillTextVerified: {
+    color: colors.tealDeep,
+  },
+  verificationPillTextNegative: {
+    color: "#C0392B",
   },
   bioText: {
     fontFamily: fonts.regular,

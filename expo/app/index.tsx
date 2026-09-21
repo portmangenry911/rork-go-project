@@ -1,14 +1,32 @@
+import { useQuery } from "@tanstack/react-query";
 import { Redirect } from "expo-router";
 import React from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import PrimaryButton from "@/components/PrimaryButton";
 import { colors, fonts } from "@/constants/theme";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 
 export default function Index() {
-  const { session, isAuthReady, role, isRoleLoading, signOut } = useAuth();
+  const { session, isAuthReady, role, isRoleLoading, signOut, userId } =
+    useAuth();
+
+  // Founding Doctor Program is the only onboarding path in v1 — every
+  // doctor must sign the agreement before reaching their tabs.
+  const foundingQuery = useQuery({
+    queryKey: ["founding-gate", userId],
+    enabled: role === "doctor" && userId !== null,
+    queryFn: async (): Promise<boolean> => {
+      const { data, error } = await supabase
+        .from("doctor_profiles")
+        .select("is_founding_doctor")
+        .eq("user_id", userId as string)
+        .maybeSingle();
+      if (error) throw error;
+      return (data?.is_founding_doctor as boolean | null) ?? false;
+    },
+  });
 
   if (!isSupabaseConfigured) {
     return (
@@ -35,6 +53,16 @@ export default function Index() {
   }
 
   if (role === "doctor") {
+    if (foundingQuery.isPending) {
+      return (
+        <View style={styles.center} testID="founding-gate-loading">
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      );
+    }
+    if (foundingQuery.data === false) {
+      return <Redirect href="/founding-agreement" />;
+    }
     return <Redirect href="/(doctor)/home" />;
   }
 
