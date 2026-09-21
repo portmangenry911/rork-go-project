@@ -82,7 +82,7 @@ async function notifyDoctorOfWeeklyCheckin(
     });
   }
 
-  if (wellbeing <= 3) {
+  if (wellbeing <= 4) {
     const alertsEnabled = await isDoctorNotificationEnabled(
       doctor.doctorProfileId,
       "alerts_enabled",
