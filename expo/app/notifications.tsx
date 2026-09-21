@@ -77,6 +77,13 @@ export default function NotificationsScreen() {
   const { items, unreadCount, isLoading, markRead, markAllRead } =
     useNotifications();
 
+  console.log(
+    "[notifications] items:",
+    items.length,
+    "unreadCount:",
+    unreadCount,
+  );
+
   const openItem = (item: AppNotification): void => {
     if (!item.is_read) markRead.mutate(item.id);
     if (item.link !== null && item.link.length > 0) {
@@ -96,27 +103,33 @@ export default function NotificationsScreen() {
         </Pressable>
         <Text style={styles.title}>Сповіщення</Text>
 
-        {role === "patient" && (
-          <Pressable
-            onPress={() => router.push("/reminders")}
-            style={styles.iconBtn}
-            testID="notifications-settings"
-          >
-            <Settings2 size={19} color={colors.ink} strokeWidth={1.9} />
-          </Pressable>
-        )}
+        <View style={styles.headerActions}>
+          {unreadCount > 0 && (
+            <Pressable
+              onPress={() => markAllRead.mutate()}
+              style={styles.iconBtn}
+              testID="mark-all-read"
+              hitSlop={8}
+            >
+              <CheckCheck size={19} color={colors.navy} strokeWidth={2} />
+            </Pressable>
+          )}
+          {(role === "patient" || role === "doctor") && (
+            <Pressable
+              onPress={() =>
+                router.push(
+                  role === "doctor" ? "/doctor-notifications" : "/reminders",
+                )
+              }
+              style={styles.iconBtn}
+              testID="notifications-settings"
+              hitSlop={8}
+            >
+              <Settings2 size={19} color={colors.ink} strokeWidth={1.9} />
+            </Pressable>
+          )}
+        </View>
       </View>
-
-      {unreadCount > 0 && (
-        <Pressable
-          onPress={() => markAllRead.mutate()}
-          style={styles.markAll}
-          testID="mark-all-read"
-        >
-          <CheckCheck size={15} color={colors.navy} strokeWidth={2} />
-          <Text style={styles.markAllText}>Позначити всі прочитаними</Text>
-        </Pressable>
-      )}
 
       {isLoading ? (
         <View style={styles.center}>
@@ -191,21 +204,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: { flex: 1, fontFamily: fonts.serif, fontSize: 22, color: colors.ink },
-  markAll: {
+  headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-    marginLeft: 20,
-    marginBottom: 10,
-    paddingHorizontal: 12,
-    height: 32,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    backgroundColor: colors.card,
+    gap: 8,
   },
-  markAllText: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.navy },
   scroll: { flex: 1 },
   content: { paddingHorizontal: 20 },
   row: {
