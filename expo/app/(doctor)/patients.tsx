@@ -1,8 +1,11 @@
+import { File, Paths } from "expo-file-system";
 import { useRouter } from "expo-router";
-import { Search, UserPlus } from "lucide-react-native";
+import * as Sharing from "expo-sharing";
+import { Download, Search, UserPlus } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,7 +19,7 @@ import AvatarInitials from "@/components/AvatarInitials";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { useDoctorPatients } from "@/hooks/useDoctorPatients";
 import type { DoctorPatientItem } from "@/hooks/useDoctorPatients";
-import { daysSince } from "@/utils/dates";
+import { daysSince, todayISO } from "@/utils/dates";
 import { formatKg } from "@/utils/format";
 
 type Filter = "all" | "active" | "attention";
@@ -35,12 +38,40 @@ function updatedLabel(date: string | null): string {
   return `оновлено ${days} дн. тому`;
 }
 
+/** Wraps a CSV field in quotes when it contains a comma, quote or newline. */
+function csvField(value: string): string {
+  if (/[",\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function buildPatientsCsv(rows: DoctorPatientItem[]): string {
+  const header = ["Ім'я", "Дата підключення", "Статус циклу", "Останній чек-ін"];
+  const lines = [header.map(csvField).join(",")];
+  for (const p of rows) {
+    lines.push(
+      [
+        `${p.firstName} ${p.lastName}`,
+        p.connectedAt !== null ? p.connectedAt.slice(0, 10) : "",
+        p.cycle !== null ? "Активний цикл" : "Немає циклу",
+        p.lastCheckinDate ?? "",
+      ]
+        .map(csvField)
+        .join(","),
+    );
+  }
+  return lines.join("\n");
+}
+
 export default function DoctorPatientsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { patients, isLoading } = useDoctorPatients();
   const [search, setSearch] = useState<string>("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const filtered: DoctorPatientItem[] = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -56,6 +87,41 @@ export default function DoctorPatientsScreen() {
       return true;
     });
   }, [patients, search, filter]);
+
+  const handleExportCsv = async (): Promise<void> => {
+    setExportError(null);
+    setIsExporting(true);
+    try {
+      const csv = buildPatientsCsv(filtered);
+      const filename = `pacienty-${todayISO()}.csv`;
+
+      if (Platform.OS === "web") {
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      const file = new File(Paths.cache, filename);
+      file.create({ overwrite: true });
+      file.write(csv);
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(file.uri, { mimeType: "text/csv" });
+      }
+    } catch (err) {
+      console.log("[patients] csv export failed:", err);
+      setExportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -76,7 +142,30 @@ export default function DoctorPatientsScreen() {
       showsVerticalScrollIndicator={false}
       testID="doctor-patients-screen"
     >
-      <Text style={styles.title}>Пацієнти</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>Пацієнти</Text>
+        <Pressable
+          testID="export-patients-csv"
+          onPress={handleExportCsv}
+          disabled={isExporting || filtered.length === 0}
+          style={({ pressed }) => [
+            styles.exportButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          {isExporting ? (
+            <ActivityIndicator size="small" color={colors.navy} />
+          ) : (
+            <Download size={18} color={colors.navy} strokeWidth={2} />
+          )}
+        </Pressable>
+      </View>
+
+      {exportError !== null && (
+        <Text style={styles.exportError} testID="export-error">
+          {exportError}
+        </Text>
+      )}
 
       <View style={styles.searchBar}>
         <Search size={18} color={colors.sub} strokeWidth={1.8} />
@@ -211,11 +300,31 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
   title: {
     fontFamily: fonts.serif,
     fontSize: 24,
     color: colors.navyDeep,
-    marginBottom: 16,
+  },
+  exportButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+    ...softShadow,
+  },
+  exportError: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.amber,
+    marginBottom: 12,
   },
   searchBar: {
     flexDirection: "row",

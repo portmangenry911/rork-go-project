@@ -32,7 +32,9 @@ export function useDoctorHome() {
     queryFn: async (): Promise<RelationWithPatient[]> => {
       const { data, error } = await supabase
         .from("doctor_patient_relations")
-        .select("id, status, patient:patient_profiles(id, first_name, last_name)")
+        .select(
+          "id, status, created_at, patient:patient_profiles(id, first_name, last_name)",
+        )
         .eq("doctor_id", doctorId as string)
         .eq("status", "active");
       if (error) throw error;

@@ -28,6 +28,8 @@ export interface DoctorPatientItem {
   latestWellbeing: number | null;
   /** Days left until the cycle's expected end, null when no end date. */
   daysToCycleEnd: number | null;
+  /** When the doctor_patient_relations row was created. */
+  connectedAt: string | null;
 }
 
 export type AttentionReason =
@@ -217,6 +219,7 @@ export function useDoctorPatients() {
             attentionLabel,
             latestWellbeing,
             daysToCycleEnd,
+            connectedAt: r.created_at,
           };
         });
     },

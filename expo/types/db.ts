@@ -24,6 +24,7 @@ export type RelationStatus = "pending" | "active" | "archived";
 export interface RelationWithPatient {
   id: string;
   status: RelationStatus;
+  created_at: string | null;
   patient: Pick<PatientProfile, "id" | "first_name" | "last_name"> | null;
 }
 
