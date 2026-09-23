@@ -3,7 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useDoctorHome } from "@/hooks/useDoctorHome";
 import type { TherapyCycle } from "@/types/db";
-import { daysSince } from "@/utils/dates";
+import { daysSince, todayISO } from "@/utils/dates";
+
+export interface TitrationStepToday {
+  doseValue: number;
+  doseUnit: string;
+  frequency: string;
+}
 
 export interface DoctorPatientItem {
   patientId: string;
@@ -30,6 +36,8 @@ export interface DoctorPatientItem {
   daysToCycleEnd: number | null;
   /** When the doctor_patient_relations row was created. */
   connectedAt: string | null;
+  /** A titration step starting today, if any. */
+  titrationToday: TitrationStepToday | null;
 }
 
 export type AttentionReason =
@@ -101,6 +109,22 @@ export function useDoctorPatients() {
         dailyRows = (dailyRes.data ?? []) as typeof dailyRows;
       }
 
+      let titrationRows: {
+        therapy_cycle_id: string;
+        dose_value: number;
+        dose_unit: string;
+        frequency: string;
+      }[] = [];
+      if (cycleIds.length > 0) {
+        const { data, error: titrationError } = await supabase
+          .from("titration_steps")
+          .select("therapy_cycle_id, dose_value, dose_unit, frequency")
+          .in("therapy_cycle_id", cycleIds)
+          .eq("start_date", todayISO());
+        if (titrationError) throw titrationError;
+        titrationRows = (data ?? []) as typeof titrationRows;
+      }
+
       return relations
         .filter((r) => r.patient !== null)
         .map((r) => {
@@ -110,6 +134,19 @@ export function useDoctorPatients() {
             last_name: string;
           };
           const cycle = cycles.find((c) => c.patient_id === patient.id) ?? null;
+          const titrationRow =
+            cycle !== null
+              ? titrationRows.find((t) => t.therapy_cycle_id === cycle.id) ??
+                null
+              : null;
+          const titrationToday: TitrationStepToday | null =
+            titrationRow !== null
+              ? {
+                  doseValue: titrationRow.dose_value,
+                  doseUnit: titrationRow.dose_unit,
+                  frequency: titrationRow.frequency,
+                }
+              : null;
 
           let cycleDay: number | null = null;
           let cycleTotalDays: number | null = null;
@@ -220,6 +257,7 @@ export function useDoctorPatients() {
             latestWellbeing,
             daysToCycleEnd,
             connectedAt: r.created_at,
+            titrationToday,
           };
         });
     },

@@ -9,6 +9,7 @@ import {
   MessageCircle,
   Plus,
   RefreshCw,
+  SlidersHorizontal,
   UserPlus,
 } from "lucide-react-native";
 import React from "react";
@@ -44,6 +45,55 @@ export default function DoctorHomeScreen() {
   const { profile, relations, isLoading } = useDoctorHome();
   const { patients } = useDoctorPatients();
   const flagged = patients.filter((p) => p.needsAttention);
+
+  // "Найближчі дії" — a separate widget from "Потребує уваги" above; it
+  // groups patients by upcoming action instead of a single attention
+  // reason, so one patient can appear in more than one row here.
+  const cycleEndingSoon = patients.filter(
+    (p) =>
+      p.daysToCycleEnd !== null && p.daysToCycleEnd >= 0 && p.daysToCycleEnd <= 3,
+  );
+  const titrationDueToday = patients.filter((p) => p.titrationToday !== null);
+  const overdueCheckin = patients.filter(
+    (p) => p.attentionReason === "no_checkin",
+  );
+
+  interface UpcomingAction {
+    key: string;
+    patientId: string;
+    name: string;
+    subtitle: string;
+    icon: React.ReactNode;
+  }
+
+  const upcomingActions: UpcomingAction[] = [
+    ...cycleEndingSoon.map((p) => ({
+      key: `cycle-${p.patientId}`,
+      patientId: p.patientId,
+      name: `${p.firstName} ${p.lastName}`,
+      subtitle:
+        p.daysToCycleEnd === 0
+          ? "Цикл завершується сьогодні"
+          : `Цикл завершується через ${p.daysToCycleEnd} дн.`,
+      icon: <CalendarPlus size={16} color={colors.navy} strokeWidth={2} />,
+    })),
+    ...titrationDueToday.map((p) => ({
+      key: `titration-${p.patientId}`,
+      patientId: p.patientId,
+      name: `${p.firstName} ${p.lastName}`,
+      subtitle: `Крок титрації сьогодні · ${String(
+        p.titrationToday?.doseValue ?? "",
+      ).replace(".", ",")} ${p.titrationToday?.doseUnit ?? ""}`,
+      icon: <SlidersHorizontal size={16} color={colors.navy} strokeWidth={2} />,
+    })),
+    ...overdueCheckin.map((p) => ({
+      key: `checkin-${p.patientId}`,
+      patientId: p.patientId,
+      name: `${p.firstName} ${p.lastName}`,
+      subtitle: p.attentionLabel ?? "Прострочений чек-ін",
+      icon: <BellRing size={16} color={colors.navy} strokeWidth={2} />,
+    })),
+  ];
 
   const consultationsToday = patients.filter(
     (p) => p.lastCheckinDate === todayISO(),
@@ -160,6 +210,41 @@ export default function DoctorHomeScreen() {
           <Text style={styles.secondaryActionText}>Цикл</Text>
         </Pressable>
       </View>
+
+      {hasPatients && upcomingActions.length > 0 && (
+        <View style={styles.section} testID="upcoming-actions">
+          <Text style={styles.sectionTitle}>Найближчі дії</Text>
+          <View style={styles.listCard}>
+            {upcomingActions.map((action, index) => (
+              <View key={action.key}>
+                {index > 0 && <View style={styles.divider} />}
+                <Pressable
+                  testID={`upcoming-action-${action.key}`}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/patient-detail",
+                      params: { id: action.patientId },
+                    })
+                  }
+                  style={({ pressed }) => [
+                    styles.attentionRow,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={styles.upcomingIcon}>{action.icon}</View>
+                  <View style={styles.patientInfo}>
+                    <Text style={styles.patientName}>{action.name}</Text>
+                    <Text style={styles.attentionLabel}>
+                      {action.subtitle}
+                    </Text>
+                  </View>
+                  <ChevronRight size={16} color={colors.sub} strokeWidth={2} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       {hasPatients ? (
         <View style={styles.section} testID="needs-attention">
@@ -507,6 +592,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 13,
     gap: 10,
+  },
+  upcomingIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.mint,
+    alignItems: "center",
+    justifyContent: "center",
   },
   attentionMain: {
     flex: 1,
