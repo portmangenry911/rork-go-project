@@ -3,13 +3,17 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Print from "expo-print";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
+import * as WebBrowser from "expo-web-browser";
 import {
   ArrowLeft,
   Check,
   ChevronLeft,
   ChevronRight,
   FileDown,
+  FileText,
+  Image as ImageIcon,
   Images,
+  NotebookPen,
   SlidersHorizontal,
   MessageCircle,
   X,
@@ -39,6 +43,12 @@ import Svg, {
 import AvatarInitials from "@/components/AvatarInitials";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { useDoctorHome } from "@/hooks/useDoctorHome";
+import {
+  STATUS_LABELS,
+  useQuestionsForPatient,
+  type QuestionStatus,
+} from "@/hooks/useDoctorQuestions";
+import { useLabDocumentsForPatient } from "@/hooks/useLabDocuments";
 import { supabase } from "@/lib/supabase";
 import type {
   DailyCheckin,
@@ -210,6 +220,13 @@ export default function PatientDetailScreen() {
     null,
   );
   const { profile: doctorProfile } = useDoctorHome();
+  const { questions, markViewed, markResolved } = useQuestionsForPatient(
+    typeof id === "string" ? id : null,
+  );
+  const labDocumentsQuery = useLabDocumentsForPatient(
+    typeof id === "string" ? id : null,
+  );
+  const labDocuments = labDocumentsQuery.data ?? [];
 
   const patientQuery = useQuery({
     queryKey: ["doctor-patient-detail", id],
@@ -642,6 +659,126 @@ export default function PatientDetailScreen() {
               </View>
             )}
 
+            {questions.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>ПИТАННЯ ПАЦІЄНТА</Text>
+                <View style={styles.listCard} testID="patient-questions-list">
+                  {questions.map((q, i) => (
+                    <View
+                      key={q.id}
+                      style={[
+                        styles.questionRow,
+                        i > 0 && styles.feedRowBorder,
+                      ]}
+                      testID={`question-row-${q.id}`}
+                    >
+                      <View style={styles.questionHead}>
+                        <View
+                          style={[
+                            styles.questionPill,
+                            q.status === "new" && styles.questionPillNew,
+                            q.status === "resolved" &&
+                              styles.questionPillResolved,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.questionPillText,
+                              q.status === "new" &&
+                                styles.questionPillTextNew,
+                              q.status === "resolved" &&
+                                styles.questionPillTextResolved,
+                            ]}
+                          >
+                            {STATUS_LABELS[q.status as QuestionStatus]}
+                          </Text>
+                        </View>
+                        <Text style={styles.questionDate}>
+                          {formatDateShort(q.created_at)}
+                        </Text>
+                      </View>
+                      <Text style={styles.questionText}>
+                        {q.question_text}
+                      </Text>
+                      <View style={styles.questionActions}>
+                        {q.status === "new" && (
+                          <Pressable
+                            testID={`question-view-${q.id}`}
+                            onPress={() => markViewed.mutate(q.id)}
+                            style={styles.questionActionButton}
+                          >
+                            <Text style={styles.questionActionText}>
+                              Переглянув
+                            </Text>
+                          </Pressable>
+                        )}
+                        {q.status !== "resolved" && (
+                          <Pressable
+                            testID={`question-resolve-${q.id}`}
+                            onPress={() => markResolved.mutate(q.id)}
+                            style={styles.questionActionButton}
+                          >
+                            <Text style={styles.questionActionText}>
+                              Розглянуто
+                            </Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {labDocuments.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>АНАЛІЗИ</Text>
+                <View style={styles.listCard} testID="patient-lab-documents-list">
+                  {labDocuments.map((doc, i) => (
+                    <Pressable
+                      key={doc.id}
+                      testID={`lab-document-row-${doc.id}`}
+                      disabled={doc.file_url === null}
+                      onPress={() => {
+                        if (doc.file_url !== null) {
+                          void WebBrowser.openBrowserAsync(doc.file_url);
+                        }
+                      }}
+                      style={[
+                        styles.labDocRow,
+                        i > 0 && styles.feedRowBorder,
+                      ]}
+                    >
+                      <View style={styles.labDocIcon}>
+                        {doc.file_type === "image" ? (
+                          <ImageIcon size={17} color={colors.navy} strokeWidth={2} />
+                        ) : doc.file_type === "manual" ? (
+                          <NotebookPen size={17} color={colors.navy} strokeWidth={2} />
+                        ) : (
+                          <FileText size={17} color={colors.navy} strokeWidth={2} />
+                        )}
+                      </View>
+                      <View style={styles.labDocBody}>
+                        <Text style={styles.labDocTitle}>
+                          {doc.file_type === "manual"
+                            ? "Ручний запис"
+                            : doc.file_name ?? "Файл"}
+                        </Text>
+                        {doc.notes !== null && doc.notes.length > 0 && (
+                          <Text style={styles.labDocNotes} numberOfLines={2}>
+                            {doc.notes}
+                          </Text>
+                        )}
+                        <Text style={styles.labDocDate}>
+                          {formatDateShort(doc.lab_date ?? doc.created_at)}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
+
             {feed.length > 0 && (
               <>
                 <Text style={styles.sectionLabel}>ОСТАННІ ЧЕК-ІНИ</Text>
@@ -1038,6 +1175,100 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     color: colors.sub,
     marginTop: 3,
+  },
+  labDocRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 13,
+  },
+  labDocIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.mint,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  labDocBody: { flex: 1 },
+  labDocTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  labDocNotes: {
+    fontFamily: fonts.regular,
+    fontSize: 12.5,
+    color: colors.sub,
+    marginTop: 2,
+  },
+  labDocDate: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: colors.sub,
+    marginTop: 3,
+  },
+  questionRow: {
+    paddingVertical: 14,
+  },
+  questionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  questionPill: {
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: colors.hairline,
+  },
+  questionPillNew: {
+    backgroundColor: "#FFF3C4",
+  },
+  questionPillResolved: {
+    backgroundColor: colors.mint,
+  },
+  questionPillText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.sub,
+  },
+  questionPillTextNew: {
+    color: "#8A6D00",
+  },
+  questionPillTextResolved: {
+    color: colors.tealDeep,
+  },
+  questionDate: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.sub,
+  },
+  questionText: {
+    fontFamily: fonts.regular,
+    fontSize: 14.5,
+    lineHeight: 21,
+    color: colors.ink,
+    marginBottom: 8,
+  },
+  questionActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  questionActionButton: {
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  questionActionText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12.5,
+    color: colors.navy,
   },
   cycleCard: {
     backgroundColor: colors.card,

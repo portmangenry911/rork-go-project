@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { BellRing, ChevronRight, LogOut, MessageCircle, Pencil } from "lucide-react-native";
+import { BellRing, ChevronRight, FlaskConical, HelpCircle, LogOut, MessageCircle, Pencil } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -431,6 +431,36 @@ export default function PatientProfileScreen() {
               <View style={styles.menuText}>
                 <Text style={styles.menuTitle}>Нагадування</Text>
                 <Text style={styles.menuSub}>Час і частота чек-інів</Text>
+              </View>
+              <ChevronRight size={18} color={colors.sub} strokeWidth={1.8} />
+            </Pressable>
+
+            <Pressable
+              testID="lab-documents-link"
+              onPress={() => router.push("/lab-documents")}
+              style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
+            >
+              <View style={styles.menuIcon}>
+                <FlaskConical size={18} color={colors.tealDeep} strokeWidth={2} />
+              </View>
+              <View style={styles.menuText}>
+                <Text style={styles.menuTitle}>Аналізи</Text>
+                <Text style={styles.menuSub}>Завантажте результати або внесіть вручну</Text>
+              </View>
+              <ChevronRight size={18} color={colors.sub} strokeWidth={1.8} />
+            </Pressable>
+
+            <Pressable
+              testID="questions-link"
+              onPress={() => router.push("/questions")}
+              style={({ pressed }) => [styles.menuRow, pressed && styles.pressed]}
+            >
+              <View style={styles.menuIcon}>
+                <HelpCircle size={18} color={colors.tealDeep} strokeWidth={2} />
+              </View>
+              <View style={styles.menuText}>
+                <Text style={styles.menuTitle}>Питання лікарю</Text>
+                <Text style={styles.menuSub}>Запитайте, лікар побачить і дасть відповідь</Text>
               </View>
               <ChevronRight size={18} color={colors.sub} strokeWidth={1.8} />
             </Pressable>
