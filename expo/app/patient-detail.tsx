@@ -309,6 +309,7 @@ export default function PatientDetailScreen() {
   const completeCycle = useMutation({
     mutationFn: async (outcome: CycleOutcome): Promise<void> => {
       const activeCycleId = cycleQuery.data?.id;
+      const doctorId = cycleQuery.data?.doctor_id;
       if (activeCycleId === undefined) {
         throw new Error("Активний цикл не знайдено.");
       }
@@ -321,6 +322,29 @@ export default function PatientDetailScreen() {
         })
         .eq("id", activeCycleId);
       if (error) throw new Error(error.message);
+
+      // PRD 6.1: only an "achieved" outcome counts toward the doctor's
+      // success-cases tally. No atomic increment RPC exists yet, so this
+      // is a read-then-write — acceptable at founding-pilot volume.
+      if (outcome === "achieved" && doctorId !== undefined) {
+        const { data: doctorRow } = await supabase
+          .from("doctor_profiles")
+          .select("successful_cases")
+          .eq("id", doctorId)
+          .maybeSingle();
+        const current =
+          (doctorRow?.successful_cases as number | null | undefined) ?? 0;
+        const { error: bumpError } = await supabase
+          .from("doctor_profiles")
+          .update({ successful_cases: current + 1 })
+          .eq("id", doctorId);
+        if (bumpError) {
+          console.error(
+            "[complete-cycle] failed to bump successful_cases",
+            bumpError,
+          );
+        }
+      }
     },
     onSuccess: () => {
       setIsCompleteModalOpen(false);
@@ -330,6 +354,9 @@ export default function PatientDetailScreen() {
       });
       void queryClient.invalidateQueries({
         queryKey: ["doctor-active-patients"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["doctor-profile-full"],
       });
       void queryClient.invalidateQueries({
         queryKey: ["doctor-patients-enriched"],

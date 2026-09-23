@@ -33,6 +33,7 @@ interface DoctorProfileRow {
   is_founding_doctor: boolean | null;
   founding_joined_at?: string | null;
   verification_status?: VerificationStatus | null;
+  successful_cases?: number | null;
   bio?: string | null;
   work_format?: string | null;
 }
@@ -87,23 +88,13 @@ export default function DoctorProfileScreen() {
   const statsQuery = useQuery({
     queryKey: ["doctor-profile-stats", doctorId],
     enabled: doctorId !== null,
-    queryFn: async (): Promise<{ active: number; completed: number }> => {
-      const [relationsRes, cyclesRes] = await Promise.all([
-        supabase
-          .from("doctor_patient_relations")
-          .select("id", { count: "exact", head: true })
-          .eq("doctor_id", doctorId as string)
-          .eq("status", "active"),
-        supabase
-          .from("therapy_cycles")
-          .select("id", { count: "exact", head: true })
-          .eq("doctor_id", doctorId as string)
-          .eq("status", "completed"),
-      ]);
-      return {
-        active: relationsRes.count ?? 0,
-        completed: cyclesRes.count ?? 0,
-      };
+    queryFn: async (): Promise<{ active: number }> => {
+      const { count } = await supabase
+        .from("doctor_patient_relations")
+        .select("id", { count: "exact", head: true })
+        .eq("doctor_id", doctorId as string)
+        .eq("status", "active");
+      return { active: count ?? 0 };
     },
   });
 
@@ -380,7 +371,7 @@ export default function DoctorProfileScreen() {
               </View>
               <View style={styles.statCard}>
                 <Text style={[styles.statValue, styles.tealText]}>
-                  {statsQuery.data?.completed ?? "—"}
+                  {profile?.successful_cases ?? 0}
                 </Text>
                 <Text style={styles.statLabel}>Успішних випадків</Text>
               </View>
