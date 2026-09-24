@@ -53,6 +53,16 @@ export default function PatientConsentScreen() {
     setChecked((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const toggleAll = (): void => {
+    setError(null);
+    const next = !allChecked;
+    const nextChecked: Record<string, boolean> = {};
+    for (const item of CONSENT_ITEMS) {
+      nextChecked[item.key] = next;
+    }
+    setChecked(nextChecked);
+  };
+
   const handleSubmit = (): void => {
     if (!allChecked) return;
     giveConsent.mutate(undefined, {
@@ -121,6 +131,23 @@ export default function PatientConsentScreen() {
         )}
 
         <Text style={styles.heading}>Я підтверджую, що:</Text>
+
+        {!isReview && (
+          <Pressable
+            testID="consent-select-all"
+            onPress={toggleAll}
+            style={styles.selectAllRow}
+          >
+            <View
+              style={[styles.checkbox, allChecked && styles.checkboxChecked]}
+            >
+              {allChecked && (
+                <Check size={13} color="#FFFFFF" strokeWidth={3} />
+              )}
+            </View>
+            <Text style={styles.selectAllLabel}>Обрати все</Text>
+          </Pressable>
+        )}
 
         <View style={styles.card}>
           {CONSENT_ITEMS.map((item, i) => (
@@ -226,6 +253,18 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: colors.ink,
     marginBottom: 14,
+  },
+  selectAllRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    alignSelf: "flex-start",
+    marginBottom: 12,
+  },
+  selectAllLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.navy,
   },
   card: {
     backgroundColor: colors.card,
