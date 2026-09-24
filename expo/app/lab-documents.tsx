@@ -72,6 +72,7 @@ export default function LabDocumentsScreen() {
   const draftsRef = useRef(drafts);
   draftsRef.current = drafts;
   const [leaveConfirmVisible, setLeaveConfirmVisible] = useState(false);
+  const [leaveConsentChecked, setLeaveConsentChecked] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
   const pendingActionRef = useRef<Parameters<
     Parameters<typeof navigation.addListener<"beforeRemove">>[1]
@@ -83,6 +84,7 @@ export default function LabDocumentsScreen() {
       e.preventDefault();
       pendingActionRef.current = e.data.action;
       setLeaveError(null);
+      setLeaveConsentChecked(false);
       setLeaveConfirmVisible(true);
     });
     return unsubscribe;
@@ -103,6 +105,7 @@ export default function LabDocumentsScreen() {
   };
 
   const handleSaveAndLeave = (): void => {
+    if (!leaveConsentChecked) return;
     setLeaveError(null);
     saveDrafts.mutate(draftsRef.current, {
       onSuccess: () => {
@@ -374,6 +377,37 @@ export default function LabDocumentsScreen() {
             <Text style={styles.modalText}>
               У вас є незбережені дані аналізів. Зберегти зміни?
             </Text>
+
+            <View style={styles.consentRow}>
+              <Pressable
+                testID="leave-consent-checkbox"
+                onPress={() => setLeaveConsentChecked((prev) => !prev)}
+                style={[
+                  styles.checkbox,
+                  leaveConsentChecked && styles.checkboxChecked,
+                ]}
+              >
+                {leaveConsentChecked && (
+                  <Check size={13} color="#FFFFFF" strokeWidth={3} />
+                )}
+              </Pressable>
+              <Text
+                style={styles.consentText}
+                onPress={() => setLeaveConsentChecked((prev) => !prev)}
+              >
+                {CONSENT_PREFIX}
+                <Text
+                  style={styles.consentLink}
+                  onPress={() =>
+                    router.push("/patient-consent?review=1" as never)
+                  }
+                >
+                  {CONSENT_LINK_LABEL}
+                </Text>
+                .
+              </Text>
+            </View>
+
             {leaveError !== null && (
               <Text style={styles.error} testID="leave-confirm-error">
                 {leaveError}
@@ -393,9 +427,10 @@ export default function LabDocumentsScreen() {
               <Pressable
                 testID="leave-save-button"
                 onPress={handleSaveAndLeave}
-                disabled={saveDrafts.isPending}
+                disabled={!leaveConsentChecked || saveDrafts.isPending}
                 style={({ pressed }) => [
                   styles.modalSaveButton,
+                  !leaveConsentChecked && styles.saveButtonDisabled,
                   pressed && styles.pressed,
                 ]}
               >
