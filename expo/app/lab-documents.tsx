@@ -1,16 +1,18 @@
-import { useRouter } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import {
   ArrowLeft,
+  Check,
   ChevronRight,
   FileText,
   FlaskConical,
   Image as ImageIcon,
   Upload,
 } from "lucide-react-native";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,13 +27,19 @@ import {
   type LabDocument,
   type LabFileType,
 } from "@/hooks/useLabDocuments";
+import { useLabIndicatorDraftStore } from "@/hooks/useLabIndicatorDraftStore";
 import {
   latestByIndicator,
   useLabIndicatorsCatalog,
   usePatientLabIndicatorValues,
+  useSaveLabIndicatorDrafts,
 } from "@/hooks/useLabIndicators";
 import { supabase } from "@/lib/supabase";
 import { formatDateShort } from "@/utils/dates";
+
+const CONSENT_PREFIX =
+  "Я підтверджую, що особисто вніс(ла) та перевірив(ла) ці дані, і несу відповідальність за їх достовірність. Ознайомлений(а) з ";
+const CONSENT_LINK_LABEL = "Умовами використання";
 
 function iconFor(type: LabFileType): React.ReactNode {
   const size = 18;
@@ -43,17 +51,70 @@ function iconFor(type: LabFileType): React.ReactNode {
 
 export default function LabDocumentsScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const renderCount = useRef(0);
-  renderCount.current += 1;
-  console.log("[lab-documents] render #", renderCount.current);
-
   const { documents, isLoading, uploadFile } = usePatientLabDocuments();
   const catalogQuery = useLabIndicatorsCatalog();
   const { values: indicatorValues, isLoading: indicatorsLoading } =
     usePatientLabIndicatorValues();
 
-  const [error, setError] = useState<string | null>(null);
+  const drafts = useLabIndicatorDraftStore((s) => s.drafts);
+  const clearAllDrafts = useLabIndicatorDraftStore((s) => s.clearAll);
+  const saveDrafts = useSaveLabIndicatorDrafts();
+  const draftEntries = Object.entries(drafts);
+  const hasDrafts = draftEntries.length > 0;
+
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [consentChecked, setConsentChecked] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Leaving with unsaved drafts — intercept and ask.
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
+  const [leaveConfirmVisible, setLeaveConfirmVisible] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+  const pendingActionRef = useRef<Parameters<
+    Parameters<typeof navigation.addListener<"beforeRemove">>[1]
+  >[0]["data"]["action"] | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("beforeRemove", (e) => {
+      if (Object.keys(draftsRef.current).length === 0) return;
+      e.preventDefault();
+      pendingActionRef.current = e.data.action;
+      setLeaveError(null);
+      setLeaveConfirmVisible(true);
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const proceedWithPendingAction = (): void => {
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    setLeaveConfirmVisible(false);
+    if (action !== null) {
+      navigation.dispatch(action);
+    }
+  };
+
+  const handleDiscardAndLeave = (): void => {
+    clearAllDrafts();
+    proceedWithPendingAction();
+  };
+
+  const handleSaveAndLeave = (): void => {
+    setLeaveError(null);
+    saveDrafts.mutate(draftsRef.current, {
+      onSuccess: () => {
+        clearAllDrafts();
+        proceedWithPendingAction();
+      },
+      onError: (err: unknown) =>
+        setLeaveError(
+          err instanceof Error ? err.message : "Не вдалося зберегти.",
+        ),
+    });
+  };
 
   const openDocument = async (doc: LabDocument): Promise<void> => {
     const { data } = await supabase.storage
@@ -65,10 +126,25 @@ export default function LabDocumentsScreen() {
   };
 
   const handleUpload = (): void => {
-    setError(null);
+    setUploadError(null);
     uploadFile.mutate(undefined, {
       onError: (err: unknown) =>
-        setError(err instanceof Error ? err.message : "Не вдалося завантажити."),
+        setUploadError(
+          err instanceof Error ? err.message : "Не вдалося завантажити.",
+        ),
+    });
+  };
+
+  const handleSaveIndicators = (): void => {
+    if (!consentChecked) return;
+    setSaveError(null);
+    saveDrafts.mutate(drafts, {
+      onSuccess: () => {
+        clearAllDrafts();
+        setConsentChecked(false);
+      },
+      onError: (err: unknown) =>
+        setSaveError(err instanceof Error ? err.message : "Не вдалося зберегти."),
     });
   };
 
@@ -118,9 +194,9 @@ export default function LabDocumentsScreen() {
           )}
         </Pressable>
 
-        {error !== null && (
+        {uploadError !== null && (
           <Text style={styles.error} testID="lab-documents-error">
-            {error}
+            {uploadError}
           </Text>
         )}
 
@@ -163,7 +239,9 @@ export default function LabDocumentsScreen() {
                 {indicators
                   .filter((i) => i.category === category)
                   .map((indicator, i) => {
-                    const lastValue = latest.get(indicator.id) ?? null;
+                    const savedValue = latest.get(indicator.id) ?? null;
+                    const draftValue = drafts[indicator.id];
+                    const isDraft = draftValue !== undefined;
                     return (
                       <Pressable
                         key={indicator.id}
@@ -183,16 +261,29 @@ export default function LabDocumentsScreen() {
                           <Text style={styles.indicatorLabel}>
                             {indicator.label}
                           </Text>
-                          {lastValue !== null && (
-                            <Text style={styles.indicatorDate}>
-                              {formatDateShort(lastValue.measured_at)}
+                          {isDraft ? (
+                            <Text style={styles.indicatorDraftTag}>
+                              Не збережено
                             </Text>
+                          ) : (
+                            savedValue !== null && (
+                              <Text style={styles.indicatorDate}>
+                                {formatDateShort(savedValue.measured_at)}
+                              </Text>
+                            )
                           )}
                         </View>
-                        <Text style={styles.indicatorValue}>
-                          {lastValue !== null
-                            ? `${lastValue.value} ${indicator.unit}`
-                            : "—"}
+                        <Text
+                          style={[
+                            styles.indicatorValue,
+                            isDraft && styles.indicatorValueDraft,
+                          ]}
+                        >
+                          {isDraft
+                            ? `${draftValue} ${indicator.unit}`
+                            : savedValue !== null
+                              ? `${savedValue.value} ${indicator.unit}`
+                              : "—"}
                         </Text>
                         <ChevronRight
                           size={16}
@@ -206,7 +297,118 @@ export default function LabDocumentsScreen() {
             </View>
           ))
         )}
+
+        {hasDrafts && (
+          <View style={styles.saveCard} testID="save-indicators-card">
+            <Text style={styles.saveSummary}>
+              Змінено показників: {draftEntries.length}
+            </Text>
+
+            <View style={styles.consentRow}>
+              <Pressable
+                testID="indicators-consent-checkbox"
+                onPress={() => setConsentChecked((prev) => !prev)}
+                style={[
+                  styles.checkbox,
+                  consentChecked && styles.checkboxChecked,
+                ]}
+              >
+                {consentChecked && (
+                  <Check size={13} color="#FFFFFF" strokeWidth={3} />
+                )}
+              </Pressable>
+              <Text
+                style={styles.consentText}
+                onPress={() => setConsentChecked((prev) => !prev)}
+              >
+                {CONSENT_PREFIX}
+                <Text
+                  style={styles.consentLink}
+                  onPress={() =>
+                    router.push("/patient-consent?review=1" as never)
+                  }
+                >
+                  {CONSENT_LINK_LABEL}
+                </Text>
+                .
+              </Text>
+            </View>
+
+            {saveError !== null && (
+              <Text style={styles.error} testID="save-indicators-error">
+                {saveError}
+              </Text>
+            )}
+
+            <Pressable
+              testID="save-indicators-button"
+              onPress={handleSaveIndicators}
+              disabled={!consentChecked || saveDrafts.isPending}
+              style={({ pressed }) => [
+                styles.saveButton,
+                !consentChecked && styles.saveButtonDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              {saveDrafts.isPending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.saveButtonText}>
+                  Зберегти показники аналізу
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
+
+      <Modal
+        visible={leaveConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLeaveConfirmVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard} testID="leave-confirm-modal">
+            <Text style={styles.modalTitle}>Незбережені дані</Text>
+            <Text style={styles.modalText}>
+              У вас є незбережені дані аналізів. Зберегти зміни?
+            </Text>
+            {leaveError !== null && (
+              <Text style={styles.error} testID="leave-confirm-error">
+                {leaveError}
+              </Text>
+            )}
+            <View style={styles.modalActions}>
+              <Pressable
+                testID="leave-discard-button"
+                onPress={handleDiscardAndLeave}
+                style={({ pressed }) => [
+                  styles.modalDiscardButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.modalDiscardText}>Не зберігати</Text>
+              </Pressable>
+              <Pressable
+                testID="leave-save-button"
+                onPress={handleSaveAndLeave}
+                disabled={saveDrafts.isPending}
+                style={({ pressed }) => [
+                  styles.modalSaveButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                {saveDrafts.isPending ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalSaveText}>Зберегти</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -279,10 +481,19 @@ const styles = StyleSheet.create({
     color: colors.sub,
     marginTop: 2,
   },
+  indicatorDraftTag: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.gold,
+    marginTop: 2,
+  },
   indicatorValue: {
     fontFamily: fonts.serif,
     fontSize: 16,
     color: colors.navyDeep,
+  },
+  indicatorValueDraft: {
+    color: colors.gold,
   },
   actionButton: {
     flexDirection: "row",
@@ -353,6 +564,124 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 13.5,
     color: colors.sub,
+  },
+  saveCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    padding: 16,
+    marginTop: 4,
+    ...cardShadow,
+  },
+  saveSummary: {
+    fontFamily: fonts.semibold,
+    fontSize: 13.5,
+    color: colors.ink,
+    marginBottom: 12,
+  },
+  consentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 14,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.6,
+    borderColor: colors.hairline,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.paper,
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal,
+  },
+  consentText: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: colors.sub,
+  },
+  consentLink: {
+    fontFamily: fonts.semibold,
+    color: colors.navy,
+    textDecorationLine: "underline",
+  },
+  saveButton: {
+    height: 48,
+    borderRadius: radius.button,
+    backgroundColor: colors.navy,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
+  },
+  saveButtonText: {
+    fontFamily: fonts.bold,
+    fontSize: 14.5,
+    color: "#FFFFFF",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+  modalCard: {
+    alignSelf: "stretch",
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    padding: 22,
+    ...cardShadow,
+  },
+  modalTitle: {
+    fontFamily: fonts.serif,
+    fontSize: 20,
+    color: colors.ink,
+    marginBottom: 8,
+  },
+  modalText: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.sub,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18,
+  },
+  modalDiscardButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: radius.button,
+    backgroundColor: colors.paper,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalDiscardText: {
+    fontFamily: fonts.bold,
+    fontSize: 14.5,
+    color: colors.sub,
+  },
+  modalSaveButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: radius.button,
+    backgroundColor: colors.navy,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalSaveText: {
+    fontFamily: fonts.bold,
+    fontSize: 14.5,
+    color: "#FFFFFF",
   },
   pressed: { opacity: 0.85 },
 });

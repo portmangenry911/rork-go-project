@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Check } from "lucide-react-native";
+import { ArrowLeft } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import IndicatorRuler from "@/components/IndicatorRuler";
 import IndicatorTrendChart from "@/components/IndicatorTrendChart";
 import { cardShadow, colors, fonts, radius } from "@/constants/theme";
+import { useLabIndicatorDraftStore } from "@/hooks/useLabIndicatorDraftStore";
 import {
   useLabIndicatorValuesForPatient,
   useLabIndicatorsCatalog,
@@ -24,10 +25,6 @@ import {
 } from "@/hooks/useLabIndicators";
 import { useAuth } from "@/providers/AuthProvider";
 import { formatDateShort } from "@/utils/dates";
-
-const CONSENT_PREFIX =
-  "Я підтверджую, що особисто вніс(ла) та перевірив(ла) ці дані, і несу відповідальність за їх достовірність. Ознайомлений(а) з ";
-const CONSENT_LINK_LABEL = "Умовами використання";
 
 function decimalsOf(indicator: LabIndicator): number {
   const text = String(indicator.step);
@@ -40,6 +37,12 @@ function roundToStep(value: number, indicator: LabIndicator): number {
   return Math.round(value * factor) / factor;
 }
 
+/**
+ * View history/chart for one indicator and stage a new value via the drag
+ * ruler. Nothing is written here — the value is only kept as a draft
+ * (useLabIndicatorDraftStore) until the patient commits everything at
+ * once from the lab-documents list screen.
+ */
 export default function LabIndicatorScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -78,30 +81,29 @@ export default function LabIndicatorScreen() {
   );
   const latest = history[0] ?? null;
 
-  const [draftValue, setDraftValue] = useState<number | null>(null);
-  const [confirmed, setConfirmed] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const drafts = useLabIndicatorDraftStore((s) => s.drafts);
+  const setDraft = useLabIndicatorDraftStore((s) => s.setDraft);
+  const existingDraft =
+    indicator !== null ? drafts[indicator.id] : undefined;
 
-  // Seed the draft once the indicator (and its latest value) are known.
-  if (draftValue === null && indicator !== null) {
+  const [localDraft, setLocalDraft] = useState<number | null>(null);
+
+  // Seed once the indicator is known: an already-staged draft wins over
+  // the last saved value, which wins over the middle of the range.
+  if (localDraft === null && indicator !== null) {
     const seed =
+      existingDraft ??
       history[0]?.value ??
       roundToStep((indicator.min_value + indicator.max_value) / 2, indicator);
-    setDraftValue(seed);
+    setLocalDraft(seed);
   }
 
-  const handleAdd = (): void => {
-    if (indicator === null || draftValue === null || !confirmed) return;
-    setError(null);
-    patientSide.addValue.mutate(
-      { indicatorId: indicator.id, value: draftValue },
-      {
-        onSuccess: () => setConfirmed(false),
-        onError: (err: unknown) =>
-          setError(err instanceof Error ? err.message : "Не вдалося зберегти."),
-      },
-    );
+  const handleChange = (value: number): void => {
+    setLocalDraft(value);
+    if (indicator !== null) setDraft(indicator.id, value);
   };
+
+  const hasDraft = existingDraft !== undefined;
 
   return (
     <KeyboardAvoidingView
@@ -164,19 +166,19 @@ export default function LabIndicatorScreen() {
               </View>
             )}
 
-            {!isDoctor && draftValue !== null && (
+            {!isDoctor && localDraft !== null && (
               <View style={styles.addCard}>
                 <Text style={styles.addLabel}>Нове значення</Text>
                 <View style={styles.draftCenter}>
                   <Text style={styles.draftValue}>
-                    {draftValue.toFixed(decimalsOf(indicator))}
+                    {localDraft.toFixed(decimalsOf(indicator))}
                   </Text>
                   <Text style={styles.draftUnit}> {indicator.unit}</Text>
                 </View>
                 <IndicatorRuler
                   testID="indicator-value-ruler"
-                  value={draftValue}
-                  onChange={setDraftValue}
+                  value={localDraft}
+                  onChange={handleChange}
                   min={indicator.min_value}
                   max={indicator.max_value}
                   step={indicator.step}
@@ -184,56 +186,9 @@ export default function LabIndicatorScreen() {
                 <Text style={styles.rulerHint}>
                   Проведіть пальцем вліво/вправо, щоб змінити значення
                 </Text>
-
-                <View style={styles.consentRow}>
-                  <Pressable
-                    testID="indicator-consent-checkbox"
-                    onPress={() => setConfirmed((prev) => !prev)}
-                    style={[
-                      styles.checkbox,
-                      confirmed && styles.checkboxChecked,
-                    ]}
-                  >
-                    {confirmed && (
-                      <Check size={13} color="#FFFFFF" strokeWidth={3} />
-                    )}
-                  </Pressable>
-                  <Text
-                    style={styles.consentText}
-                    onPress={() => setConfirmed((prev) => !prev)}
-                  >
-                    {CONSENT_PREFIX}
-                    <Text
-                      style={styles.consentLink}
-                      onPress={() =>
-                        router.push("/patient-consent?review=1" as never)
-                      }
-                    >
-                      {CONSENT_LINK_LABEL}
-                    </Text>
-                    .
-                  </Text>
-                </View>
-
-                <Pressable
-                  testID="indicator-value-save"
-                  onPress={handleAdd}
-                  disabled={patientSide.addValue.isPending || !confirmed}
-                  style={({ pressed }) => [
-                    styles.addButton,
-                    !confirmed && styles.addButtonDisabled,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  {patientSide.addValue.isPending ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.addButtonText}>Зберегти</Text>
-                  )}
-                </Pressable>
-                {error !== null && (
-                  <Text style={styles.error} testID="indicator-value-error">
-                    {error}
+                {hasDraft && (
+                  <Text style={styles.draftNotice} testID="indicator-draft-notice">
+                    Не збережено — підтвердьте на екрані «Аналізи»
                   </Text>
                 )}
               </View>
@@ -363,60 +318,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 6,
   },
-  consentRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    marginTop: 18,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.6,
-    borderColor: colors.hairline,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.paper,
-    marginTop: 1,
-  },
-  checkboxChecked: {
-    backgroundColor: colors.teal,
-    borderColor: colors.teal,
-  },
-  consentText: {
-    flex: 1,
-    fontFamily: fonts.regular,
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: colors.sub,
-  },
-  consentLink: {
+  draftNotice: {
     fontFamily: fonts.semibold,
-    color: colors.navy,
-    textDecorationLine: "underline",
-  },
-  addButton: {
-    height: 48,
-    borderRadius: radius.button,
-    backgroundColor: colors.navy,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 16,
-  },
-  addButtonDisabled: {
-    opacity: 0.5,
-  },
-  addButtonText: {
-    fontFamily: fonts.bold,
-    fontSize: 14.5,
-    color: "#FFFFFF",
-  },
-  error: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.amber,
-    marginTop: 10,
+    fontSize: 12,
+    color: colors.gold,
+    textAlign: "center",
+    marginTop: 12,
   },
   sectionLabel: {
     fontFamily: fonts.bold,
@@ -451,5 +358,4 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     color: colors.ink,
   },
-  pressed: { opacity: 0.85 },
 });
