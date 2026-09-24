@@ -140,7 +140,14 @@ export function useQuestionsForPatient(patientId: string | null) {
   };
 }
 
-/** Doctor-side, sitewide: count of "new" questions for badges. */
+/**
+ * Doctor-side, sitewide: count of "new" questions for badges.
+ *
+ * Scoped by current active patients (same join as the RLS select policy),
+ * not by the doctor_id stored on each question row — so a question left
+ * for a prior doctor still counts once the patient's current doctor picks
+ * it up, matching PRD 6.1's "new doctor sees full history".
+ */
 export function useNewQuestionsCount() {
   const { userId } = useAuth();
 
@@ -155,10 +162,22 @@ export function useNewQuestionsCount() {
         .maybeSingle();
       const doctorId = doctorRow?.id as string | undefined;
       if (doctorId === undefined) return 0;
+
+      const { data: relations, error: relationsError } = await supabase
+        .from("doctor_patient_relations")
+        .select("patient_id")
+        .eq("doctor_id", doctorId)
+        .eq("status", "active");
+      if (relationsError) throw relationsError;
+      const patientIds = (relations ?? []).map(
+        (r) => r.patient_id as string,
+      );
+      if (patientIds.length === 0) return 0;
+
       const { count, error } = await supabase
         .from("doctor_questions")
         .select("id", { count: "exact", head: true })
-        .eq("doctor_id", doctorId)
+        .in("patient_id", patientIds)
         .eq("status", "new");
       if (error) throw error;
       return count ?? 0;

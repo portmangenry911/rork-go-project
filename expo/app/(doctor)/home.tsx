@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
@@ -27,9 +26,9 @@ import AvatarInitials from "@/components/AvatarInitials";
 import NotificationBell from "@/components/NotificationBell";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { useDoctorHome } from "@/hooks/useDoctorHome";
+import { useNewQuestionsCount } from "@/hooks/useDoctorQuestions";
 import { pushNotification } from "@/hooks/useNotifications";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/providers/AuthProvider";
 import { todayISO } from "@/utils/dates";
 import {
   useDoctorPatients,
@@ -41,7 +40,6 @@ const PLAN_LIMIT = 15;
 export default function DoctorHomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { userId } = useAuth();
   const { profile, relations, isLoading } = useDoctorHome();
   const { patients } = useDoctorPatients();
   const flagged = patients.filter((p) => p.needsAttention);
@@ -99,20 +97,7 @@ export default function DoctorHomeScreen() {
     (p) => p.lastCheckinDate === todayISO(),
   ).length;
 
-  const newQuestionsQuery = useQuery({
-    queryKey: ["doctor-new-questions", userId],
-    enabled: userId !== null,
-    queryFn: async (): Promise<number> => {
-      const { count, error } = await supabase
-        .from("notifications")
-        .select("id", { count: "exact", head: true })
-        .eq("recipient_user_id", userId as string)
-        .eq("kind", "message")
-        .eq("is_read", false);
-      if (error) throw error;
-      return count ?? 0;
-    },
-  });
+  const newQuestionsQuery = useNewQuestionsCount();
 
   if (isLoading) {
     return (
