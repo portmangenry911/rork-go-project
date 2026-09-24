@@ -11,6 +11,9 @@ export interface LabIndicator {
   unit: string;
   category: string;
   sort_order: number;
+  min_value: number;
+  max_value: number;
+  step: number;
 }
 
 export interface LabIndicatorValue {
@@ -30,7 +33,9 @@ export function useLabIndicatorsCatalog() {
     queryFn: async (): Promise<LabIndicator[]> => {
       const { data, error } = await supabase
         .from("lab_indicators")
-        .select("id, code, label, unit, category, sort_order")
+        .select(
+          "id, code, label, unit, category, sort_order, min_value, max_value, step",
+        )
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data ?? []) as LabIndicator[];

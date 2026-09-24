@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft } from "lucide-react-native";
+import { ArrowLeft, Check } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -9,25 +9,37 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import IndicatorRuler from "@/components/IndicatorRuler";
 import IndicatorTrendChart from "@/components/IndicatorTrendChart";
-import { cardShadow, colors, fonts, radius, softShadow } from "@/constants/theme";
+import { cardShadow, colors, fonts, radius } from "@/constants/theme";
 import {
   useLabIndicatorValuesForPatient,
   useLabIndicatorsCatalog,
   usePatientLabIndicatorValues,
+  type LabIndicator,
 } from "@/hooks/useLabIndicators";
 import { useAuth } from "@/providers/AuthProvider";
 import { formatDateShort } from "@/utils/dates";
 
-/** "5.4" / "5,4" → 5.4; rejects anything else. */
-function parseDecimal(text: string): number | null {
-  const value = parseFloat(text.replace(",", "."));
-  return Number.isFinite(value) ? value : null;
+const CONSENT_PREFIX =
+  "Я підтверджую, що особисто вніс(ла) та перевірив(ла) ці дані, і несу відповідальність за їх достовірність. Ознайомлений(а) з ";
+// No consent/terms screen exists in the app yet — this stays plain text
+// (not a real link) until that screen is built as a separate task.
+const CONSENT_LINK_LABEL = "Умовами використання";
+
+function decimalsOf(indicator: LabIndicator): number {
+  const text = String(indicator.step);
+  const dot = text.indexOf(".");
+  return dot === -1 ? 0 : text.length - dot - 1;
+}
+
+function roundToStep(value: number, indicator: LabIndicator): number {
+  const factor = 10 ** decimalsOf(indicator);
+  return Math.round(value * factor) / factor;
 }
 
 export default function LabIndicatorScreen() {
@@ -68,21 +80,25 @@ export default function LabIndicatorScreen() {
   );
   const latest = history[0] ?? null;
 
-  const [inputValue, setInputValue] = useState<string>("");
+  const [draftValue, setDraftValue] = useState<number | null>(null);
+  const [confirmed, setConfirmed] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Seed the draft once the indicator (and its latest value) are known.
+  if (draftValue === null && indicator !== null) {
+    const seed =
+      history[0]?.value ??
+      roundToStep((indicator.min_value + indicator.max_value) / 2, indicator);
+    setDraftValue(seed);
+  }
+
   const handleAdd = (): void => {
-    if (indicator === null) return;
-    const num = parseDecimal(inputValue);
-    if (num === null) {
-      setError("Введіть число.");
-      return;
-    }
+    if (indicator === null || draftValue === null || !confirmed) return;
     setError(null);
     patientSide.addValue.mutate(
-      { indicatorId: indicator.id, value: num },
+      { indicatorId: indicator.id, value: draftValue },
       {
-        onSuccess: () => setInputValue(""),
+        onSuccess: () => setConfirmed(false),
         onError: (err: unknown) =>
           setError(err instanceof Error ? err.message : "Не вдалося зберегти."),
       },
@@ -150,37 +166,67 @@ export default function LabIndicatorScreen() {
               </View>
             )}
 
-            {!isDoctor && (
+            {!isDoctor && draftValue !== null && (
               <View style={styles.addCard}>
-                <Text style={styles.addLabel}>
-                  Нове значення ({indicator.unit || "число"})
+                <Text style={styles.addLabel}>Нове значення</Text>
+                <View style={styles.draftCenter}>
+                  <Text style={styles.draftValue}>
+                    {draftValue.toFixed(decimalsOf(indicator))}
+                  </Text>
+                  <Text style={styles.draftUnit}> {indicator.unit}</Text>
+                </View>
+                <IndicatorRuler
+                  testID="indicator-value-ruler"
+                  value={draftValue}
+                  onChange={setDraftValue}
+                  min={indicator.min_value}
+                  max={indicator.max_value}
+                  step={indicator.step}
+                />
+                <Text style={styles.rulerHint}>
+                  Проведіть пальцем вліво/вправо, щоб змінити значення
                 </Text>
-                <View style={styles.addRow}>
-                  <TextInput
-                    testID="indicator-value-input"
-                    style={styles.addInput}
-                    value={inputValue}
-                    onChangeText={setInputValue}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor={colors.sub}
-                  />
-                  <Pressable
-                    testID="indicator-value-save"
-                    onPress={handleAdd}
-                    disabled={patientSide.addValue.isPending}
-                    style={({ pressed }) => [
-                      styles.addButton,
-                      pressed && styles.pressed,
+
+                <Pressable
+                  testID="indicator-consent-checkbox"
+                  onPress={() => setConfirmed((prev) => !prev)}
+                  style={styles.consentRow}
+                >
+                  <View
+                    style={[
+                      styles.checkbox,
+                      confirmed && styles.checkboxChecked,
                     ]}
                   >
-                    {patientSide.addValue.isPending ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <Text style={styles.addButtonText}>Зберегти</Text>
+                    {confirmed && (
+                      <Check size={13} color="#FFFFFF" strokeWidth={3} />
                     )}
-                  </Pressable>
-                </View>
+                  </View>
+                  <Text style={styles.consentText}>
+                    {CONSENT_PREFIX}
+                    <Text style={styles.consentLink}>
+                      {CONSENT_LINK_LABEL}
+                    </Text>
+                    .
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  testID="indicator-value-save"
+                  onPress={handleAdd}
+                  disabled={patientSide.addValue.isPending || !confirmed}
+                  style={({ pressed }) => [
+                    styles.addButton,
+                    !confirmed && styles.addButtonDisabled,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  {patientSide.addValue.isPending ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.addButtonText}>Зберегти</Text>
+                  )}
+                </Pressable>
                 {error !== null && (
                   <Text style={styles.error} testID="indicator-value-error">
                     {error}
@@ -290,28 +336,72 @@ const styles = StyleSheet.create({
     color: colors.sub,
     marginBottom: 10,
   },
-  addRow: {
+  draftCenter: {
     flexDirection: "row",
-    gap: 10,
+    alignItems: "baseline",
+    justifyContent: "center",
+    marginBottom: 8,
   },
-  addInput: {
-    flex: 1,
-    height: 48,
-    borderRadius: radius.button,
-    backgroundColor: colors.paper,
-    paddingHorizontal: 16,
+  draftValue: {
     fontFamily: fonts.serif,
-    fontSize: 20,
-    color: colors.ink,
-    ...softShadow,
+    fontSize: 40,
+    color: colors.navyDeep,
+  },
+  draftUnit: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.sub,
+  },
+  rulerHint: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: colors.sub,
+    textAlign: "center",
+    marginTop: 6,
+  },
+  consentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginTop: 18,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.6,
+    borderColor: colors.hairline,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.paper,
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal,
+  },
+  consentText: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: colors.sub,
+  },
+  consentLink: {
+    fontFamily: fonts.semibold,
+    color: colors.navy,
+    textDecorationLine: "underline",
   },
   addButton: {
-    paddingHorizontal: 20,
     height: 48,
     borderRadius: radius.button,
     backgroundColor: colors.navy,
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 16,
+  },
+  addButtonDisabled: {
+    opacity: 0.5,
   },
   addButtonText: {
     fontFamily: fonts.bold,
