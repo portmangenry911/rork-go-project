@@ -220,13 +220,34 @@ export default function PatientDetailScreen() {
     null,
   );
   const { profile: doctorProfile } = useDoctorHome();
-  const { questions, markViewed, markResolved } = useQuestionsForPatient(
-    typeof id === "string" ? id : null,
-  );
+  const {
+    questions,
+    markViewed,
+    markResolved,
+    isError: questionsIsError,
+    error: questionsError,
+  } = useQuestionsForPatient(typeof id === "string" ? id : null);
   const labDocumentsQuery = useLabDocumentsForPatient(
     typeof id === "string" ? id : null,
   );
   const labDocuments = labDocumentsQuery.data ?? [];
+
+  console.log(
+    "[patient-detail] id param:",
+    id,
+    "typeof:",
+    typeof id,
+    "questions:",
+    questions.length,
+    "questionsIsError:",
+    questionsIsError,
+    questionsError,
+    "labDocuments:",
+    labDocuments.length,
+    "labDocumentsIsError:",
+    labDocumentsQuery.isError,
+    labDocumentsQuery.error,
+  );
 
   const patientQuery = useQuery({
     queryKey: ["doctor-patient-detail", id],
@@ -657,6 +678,15 @@ export default function PatientDetailScreen() {
                   )}
                 </View>
               </View>
+            )}
+
+            {questionsIsError && (
+              <Text style={styles.exportError} testID="questions-fetch-error">
+                Питання: помилка завантаження —{" "}
+                {questionsError instanceof Error
+                  ? questionsError.message
+                  : String(questionsError)}
+              </Text>
             )}
 
             {questions.length > 0 && (

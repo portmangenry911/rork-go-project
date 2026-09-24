@@ -93,7 +93,10 @@ export function useQuestionsForPatient(patientId: string | null) {
         )
         .eq("patient_id", patientId as string)
         .order("created_at", { ascending: false });
-      if (error) throw error;
+      if (error) {
+        console.error("[doctor-questions] fetch failed:", error.message, error);
+        throw error;
+      }
       return (data ?? []) as DoctorQuestion[];
     },
   });
@@ -130,6 +133,8 @@ export function useQuestionsForPatient(patientId: string | null) {
   return {
     questions: questionsQuery.data ?? [],
     isLoading: questionsQuery.isPending,
+    isError: questionsQuery.isError,
+    error: questionsQuery.error,
     markViewed,
     markResolved,
   };
