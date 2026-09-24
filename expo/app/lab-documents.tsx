@@ -13,6 +13,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -67,6 +68,7 @@ export default function LabDocumentsScreen() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [consentChecked, setConsentChecked] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [stickyBarHeight, setStickyBarHeight] = useState<number>(0);
 
   // Leaving with unsaved drafts — intercept and ask.
   const draftsRef = useRef(drafts);
@@ -77,11 +79,20 @@ export default function LabDocumentsScreen() {
   const pendingActionRef = useRef<Parameters<
     Parameters<typeof navigation.addListener<"beforeRemove">>[1]
   >[0]["data"]["action"] | null>(null);
+  // Set when the confirm dialog was triggered by the browser's own back
+  // button (web popstate) rather than in-app navigation — see the web
+  // effect below. Determines how proceedWithPendingAction actually leaves.
+  const webLeaveRef = useRef<boolean>(false);
+  const ignoreNextPopstateRef = useRef<boolean>(false);
 
+  // Native / in-app navigation (our back button, hardware back, gestures)
+  // — expo-router's own navigation dispatch, works as-is on web too for
+  // in-app links, just not for the browser chrome's back button.
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", (e) => {
       if (Object.keys(draftsRef.current).length === 0) return;
       e.preventDefault();
+      webLeaveRef.current = false;
       pendingActionRef.current = e.data.action;
       setLeaveError(null);
       setLeaveConsentChecked(false);
@@ -90,10 +101,65 @@ export default function LabDocumentsScreen() {
     return unsubscribe;
   }, [navigation]);
 
+  // Web only: the browser's own back/forward button changes the URL via
+  // popstate, which beforeRemove above never sees (it only knows about
+  // in-app navigation). Arm a decoy history entry while there are drafts
+  // so the first back press lands us back here instead of silently
+  // leaving, and show the same confirm dialog.
+  useEffect(() => {
+    if (Platform.OS !== "web" || !hasDrafts) return;
+    if (typeof window === "undefined") return;
+
+    window.history.pushState({ labDraftGuard: true }, "", window.location.href);
+
+    const onPopState = (): void => {
+      if (ignoreNextPopstateRef.current) {
+        ignoreNextPopstateRef.current = false;
+        return;
+      }
+      if (Object.keys(draftsRef.current).length === 0) return;
+      // Hold position — re-arm the decoy — and ask instead of leaving.
+      window.history.pushState(
+        { labDraftGuard: true },
+        "",
+        window.location.href,
+      );
+      webLeaveRef.current = true;
+      pendingActionRef.current = null;
+      setLeaveError(null);
+      setLeaveConsentChecked(false);
+      setLeaveConfirmVisible(true);
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [hasDrafts]);
+
+  // Web only: tab close / refresh / typed URL — the browser's own
+  // "leave site?" dialog. Its text can't be customized in modern
+  // browsers, but it's a real safety net for the cases popstate can't
+  // catch either.
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const handler = (e: BeforeUnloadEvent): void => {
+      if (Object.keys(draftsRef.current).length === 0) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
+
   const proceedWithPendingAction = (): void => {
+    setLeaveConfirmVisible(false);
+    if (Platform.OS === "web" && webLeaveRef.current) {
+      webLeaveRef.current = false;
+      ignoreNextPopstateRef.current = true;
+      window.history.back();
+      return;
+    }
     const action = pendingActionRef.current;
     pendingActionRef.current = null;
-    setLeaveConfirmVisible(false);
     if (action !== null) {
       navigation.dispatch(action);
     }
@@ -172,7 +238,7 @@ export default function LabDocumentsScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: insets.bottom + 24 },
+          { paddingBottom: insets.bottom + 24 + (hasDrafts ? stickyBarHeight : 0) },
         ]}
         showsVerticalScrollIndicator={false}
         testID="lab-documents-screen"
@@ -264,16 +330,10 @@ export default function LabDocumentsScreen() {
                           <Text style={styles.indicatorLabel}>
                             {indicator.label}
                           </Text>
-                          {isDraft ? (
-                            <Text style={styles.indicatorDraftTag}>
-                              Не збережено
+                          {!isDraft && savedValue !== null && (
+                            <Text style={styles.indicatorDate}>
+                              {formatDateShort(savedValue.measured_at)}
                             </Text>
-                          ) : (
-                            savedValue !== null && (
-                              <Text style={styles.indicatorDate}>
-                                {formatDateShort(savedValue.measured_at)}
-                              </Text>
-                            )
                           )}
                         </View>
                         <Text
@@ -301,69 +361,74 @@ export default function LabDocumentsScreen() {
           ))
         )}
 
-        {hasDrafts && (
-          <View style={styles.saveCard} testID="save-indicators-card">
-            <Text style={styles.saveSummary}>
-              Змінено показників: {draftEntries.length}
-            </Text>
+      </ScrollView>
 
-            <View style={styles.consentRow}>
-              <Pressable
-                testID="indicators-consent-checkbox"
-                onPress={() => setConsentChecked((prev) => !prev)}
-                style={[
-                  styles.checkbox,
-                  consentChecked && styles.checkboxChecked,
-                ]}
-              >
-                {consentChecked && (
-                  <Check size={13} color="#FFFFFF" strokeWidth={3} />
-                )}
-              </Pressable>
-              <Text
-                style={styles.consentText}
-                onPress={() => setConsentChecked((prev) => !prev)}
-              >
-                {CONSENT_PREFIX}
-                <Text
-                  style={styles.consentLink}
-                  onPress={() =>
-                    router.push("/patient-consent?review=1" as never)
-                  }
-                >
-                  {CONSENT_LINK_LABEL}
-                </Text>
-                .
-              </Text>
-            </View>
+      {hasDrafts && (
+        <View
+          style={[styles.stickyBar, { paddingBottom: insets.bottom + 14 }]}
+          onLayout={(e) => setStickyBarHeight(e.nativeEvent.layout.height)}
+          testID="save-indicators-card"
+        >
+          <Text style={styles.saveSummary}>
+            Змінено показників: {draftEntries.length}
+          </Text>
 
-            {saveError !== null && (
-              <Text style={styles.error} testID="save-indicators-error">
-                {saveError}
-              </Text>
-            )}
-
+          <View style={styles.consentRow}>
             <Pressable
-              testID="save-indicators-button"
-              onPress={handleSaveIndicators}
-              disabled={!consentChecked || saveDrafts.isPending}
-              style={({ pressed }) => [
-                styles.saveButton,
-                !consentChecked && styles.saveButtonDisabled,
-                pressed && styles.pressed,
+              testID="indicators-consent-checkbox"
+              onPress={() => setConsentChecked((prev) => !prev)}
+              style={[
+                styles.checkbox,
+                consentChecked && styles.checkboxChecked,
               ]}
             >
-              {saveDrafts.isPending ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.saveButtonText}>
-                  Зберегти показники аналізу
-                </Text>
+              {consentChecked && (
+                <Check size={13} color="#FFFFFF" strokeWidth={3} />
               )}
             </Pressable>
+            <Text
+              style={styles.consentText}
+              onPress={() => setConsentChecked((prev) => !prev)}
+            >
+              {CONSENT_PREFIX}
+              <Text
+                style={styles.consentLink}
+                onPress={() =>
+                  router.push("/patient-consent?review=1" as never)
+                }
+              >
+                {CONSENT_LINK_LABEL}
+              </Text>
+              .
+            </Text>
           </View>
-        )}
-      </ScrollView>
+
+          {saveError !== null && (
+            <Text style={styles.error} testID="save-indicators-error">
+              {saveError}
+            </Text>
+          )}
+
+          <Pressable
+            testID="save-indicators-button"
+            onPress={handleSaveIndicators}
+            disabled={!consentChecked || saveDrafts.isPending}
+            style={({ pressed }) => [
+              styles.saveButton,
+              !consentChecked && styles.saveButtonDisabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            {saveDrafts.isPending ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.saveButtonText}>
+                Зберегти показники аналізу
+              </Text>
+            )}
+          </Pressable>
+        </View>
+      )}
 
       <Modal
         visible={leaveConfirmVisible}
@@ -516,12 +581,6 @@ const styles = StyleSheet.create({
     color: colors.sub,
     marginTop: 2,
   },
-  indicatorDraftTag: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    color: colors.gold,
-    marginTop: 2,
-  },
   indicatorValue: {
     fontFamily: fonts.serif,
     fontSize: 16,
@@ -600,11 +659,12 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     color: colors.sub,
   },
-  saveCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.card,
-    padding: 16,
-    marginTop: 4,
+  stickyBar: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    backgroundColor: colors.paper,
+    borderTopWidth: 1,
+    borderTopColor: colors.hairline,
     ...cardShadow,
   },
   saveSummary: {
