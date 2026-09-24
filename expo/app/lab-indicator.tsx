@@ -27,8 +27,6 @@ import { formatDateShort } from "@/utils/dates";
 
 const CONSENT_PREFIX =
   "Я підтверджую, що особисто вніс(ла) та перевірив(ла) ці дані, і несу відповідальність за їх достовірність. Ознайомлений(а) з ";
-// No consent/terms screen exists in the app yet — this stays plain text
-// (not a real link) until that screen is built as a separate task.
 const CONSENT_LINK_LABEL = "Умовами використання";
 
 function decimalsOf(indicator: LabIndicator): number {
@@ -187,12 +185,10 @@ export default function LabIndicatorScreen() {
                   Проведіть пальцем вліво/вправо, щоб змінити значення
                 </Text>
 
-                <Pressable
-                  testID="indicator-consent-checkbox"
-                  onPress={() => setConfirmed((prev) => !prev)}
-                  style={styles.consentRow}
-                >
-                  <View
+                <View style={styles.consentRow}>
+                  <Pressable
+                    testID="indicator-consent-checkbox"
+                    onPress={() => setConfirmed((prev) => !prev)}
                     style={[
                       styles.checkbox,
                       confirmed && styles.checkboxChecked,
@@ -201,15 +197,23 @@ export default function LabIndicatorScreen() {
                     {confirmed && (
                       <Check size={13} color="#FFFFFF" strokeWidth={3} />
                     )}
-                  </View>
-                  <Text style={styles.consentText}>
+                  </Pressable>
+                  <Text
+                    style={styles.consentText}
+                    onPress={() => setConfirmed((prev) => !prev)}
+                  >
                     {CONSENT_PREFIX}
-                    <Text style={styles.consentLink}>
+                    <Text
+                      style={styles.consentLink}
+                      onPress={() =>
+                        router.push("/patient-consent?review=1" as never)
+                      }
+                    >
                       {CONSENT_LINK_LABEL}
                     </Text>
                     .
                   </Text>
-                </Pressable>
+                </View>
 
                 <Pressable
                   testID="indicator-value-save"

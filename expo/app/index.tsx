@@ -5,6 +5,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import PrimaryButton from "@/components/PrimaryButton";
 import { colors, fonts } from "@/constants/theme";
+import { CONSENT_VERSION } from "@/hooks/usePatientConsent";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -25,6 +26,32 @@ export default function Index() {
         .maybeSingle();
       if (error) throw error;
       return (data?.is_founding_doctor as boolean | null) ?? false;
+    },
+  });
+
+  // Every patient must record consent (current text version) before
+  // reaching their tabs — same gating pattern as the founding doctor flow.
+  const consentQuery = useQuery({
+    queryKey: ["patient-consent-gate", userId],
+    enabled: role === "patient" && userId !== null,
+    queryFn: async (): Promise<boolean> => {
+      const { data: profileRow, error: profileError } = await supabase
+        .from("patient_profiles")
+        .select("id")
+        .eq("user_id", userId as string)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      const patientId = profileRow?.id as string | undefined;
+      if (patientId === undefined) return false;
+
+      const { data, error } = await supabase
+        .from("patient_consents")
+        .select("id")
+        .eq("patient_id", patientId)
+        .eq("consent_version", CONSENT_VERSION)
+        .maybeSingle();
+      if (error) throw error;
+      return data !== null;
     },
   });
 
@@ -67,6 +94,16 @@ export default function Index() {
   }
 
   if (role === "patient") {
+    if (consentQuery.isPending) {
+      return (
+        <View style={styles.center} testID="consent-gate-loading">
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      );
+    }
+    if (consentQuery.data === false) {
+      return <Redirect href="/patient-consent" />;
+    }
     return <Redirect href="/(patient)/home" />;
   }
 
