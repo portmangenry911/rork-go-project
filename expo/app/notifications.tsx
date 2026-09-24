@@ -4,6 +4,7 @@ import {
   BellRing,
   CalendarClock,
   CheckCheck,
+  HelpCircle,
   MessageCircle,
   Settings2,
   SlidersHorizontal,
@@ -38,6 +39,8 @@ function iconFor(kind: NotificationKind): React.ReactNode {
       );
     case "cycle":
       return <CalendarClock size={size} color={colors.navy} strokeWidth={2} />;
+    case "question":
+      return <HelpCircle size={size} color={colors.navy} strokeWidth={2} />;
     default:
       return <BellRing size={size} color={colors.navy} strokeWidth={2} />;
   }

@@ -3,7 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/providers/AuthProvider";
 import { supabase } from "@/lib/supabase";
 
-export type NotificationKind = "checkin" | "message" | "dose" | "cycle";
+export type NotificationKind =
+  | "checkin"
+  | "message"
+  | "dose"
+  | "cycle"
+  | "question";
 
 export interface AppNotification {
   id: string;

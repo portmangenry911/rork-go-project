@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getDoctorUserIdForPatient } from "@/hooks/useNotifications";
+import {
+  getDoctorUserIdForPatient,
+  pushNotification,
+} from "@/hooks/useNotifications";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { usePatientHome } from "@/hooks/usePatientHome";
@@ -22,7 +25,7 @@ export interface DoctorQuestion {
 export const STATUS_LABELS: Record<QuestionStatus, string> = {
   new: "Новий",
   viewed: "Переглянутий",
-  resolved: "Розглянутий",
+  resolved: "Вирішено",
 };
 
 /** Patient-side: their own questions to their active doctor, plus adding one. */
@@ -62,6 +65,22 @@ export function usePatientQuestions() {
         status: "new",
       });
       if (error) throw new Error(error.message);
+
+      const questionText = text.trim();
+      const patientName =
+        profile !== null
+          ? `${profile.first_name} ${profile.last_name}`.trim()
+          : "Пацієнт";
+      await pushNotification({
+        recipientUserId: doctor.userId,
+        kind: "question",
+        title: patientName,
+        body:
+          questionText.length > 80
+            ? `${questionText.slice(0, 80)}…`
+            : questionText,
+        link: `/patient-detail?id=${patientId}`,
+      });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({
@@ -81,6 +100,12 @@ export function usePatientQuestions() {
 export function useQuestionsForPatient(patientId: string | null) {
   const queryClient = useQueryClient();
   const { userId } = useAuth();
+
+  const invalidateOpenCount = (): void => {
+    void queryClient.invalidateQueries({
+      queryKey: ["doctor-open-questions-count", userId],
+    });
+  };
 
   const questionsQuery = useQuery({
     queryKey: ["doctor-patient-questions", patientId],
@@ -116,7 +141,11 @@ export function useQuestionsForPatient(patientId: string | null) {
         .eq("status", "new");
       if (error) throw new Error(error.message);
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      // "viewed" doesn't clear the open-questions count — the question
+      // still needs a real resolution, not just a look.
+      invalidate();
+    },
   });
 
   const markResolved = useMutation({
@@ -127,7 +156,10 @@ export function useQuestionsForPatient(patientId: string | null) {
         .eq("id", questionId);
       if (error) throw new Error(error.message);
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      invalidateOpenCount();
+    },
   });
 
   return {
@@ -141,18 +173,20 @@ export function useQuestionsForPatient(patientId: string | null) {
 }
 
 /**
- * Doctor-side, sitewide: count of "new" questions for badges.
+ * Doctor-side, sitewide: count of unresolved questions ("new" + "viewed")
+ * for badges. "Viewed" still counts — opening a question isn't resolving
+ * it, so the count should keep nagging until the doctor marks it resolved.
  *
  * Scoped by current active patients (same join as the RLS select policy),
  * not by the doctor_id stored on each question row — so a question left
  * for a prior doctor still counts once the patient's current doctor picks
  * it up, matching PRD 6.1's "new doctor sees full history".
  */
-export function useNewQuestionsCount() {
+export function useOpenQuestionsCount() {
   const { userId } = useAuth();
 
   return useQuery({
-    queryKey: ["doctor-new-questions-count", userId],
+    queryKey: ["doctor-open-questions-count", userId],
     enabled: userId !== null,
     queryFn: async (): Promise<number> => {
       const { data: doctorRow } = await supabase
@@ -178,7 +212,7 @@ export function useNewQuestionsCount() {
         .from("doctor_questions")
         .select("id", { count: "exact", head: true })
         .in("patient_id", patientIds)
-        .eq("status", "new");
+        .neq("status", "resolved");
       if (error) throw error;
       return count ?? 0;
     },

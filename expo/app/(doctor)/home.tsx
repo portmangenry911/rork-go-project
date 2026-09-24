@@ -26,7 +26,7 @@ import AvatarInitials from "@/components/AvatarInitials";
 import NotificationBell from "@/components/NotificationBell";
 import { colors, cardShadow, fonts, radius, softShadow } from "@/constants/theme";
 import { useDoctorHome } from "@/hooks/useDoctorHome";
-import { useNewQuestionsCount } from "@/hooks/useDoctorQuestions";
+import { useOpenQuestionsCount } from "@/hooks/useDoctorQuestions";
 import { pushNotification } from "@/hooks/useNotifications";
 import { supabase } from "@/lib/supabase";
 import { todayISO } from "@/utils/dates";
@@ -97,7 +97,7 @@ export default function DoctorHomeScreen() {
     (p) => p.lastCheckinDate === todayISO(),
   ).length;
 
-  const newQuestionsQuery = useNewQuestionsCount();
+  const openQuestionsQuery = useOpenQuestionsCount();
 
   if (isLoading) {
     return (
@@ -168,8 +168,8 @@ export default function DoctorHomeScreen() {
           <Text style={styles.statLabel}>Консультації сьогодні</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{newQuestionsQuery.data ?? 0}</Text>
-          <Text style={styles.statLabel}>Нові питання</Text>
+          <Text style={styles.statNumber}>{openQuestionsQuery.data ?? 0}</Text>
+          <Text style={styles.statLabel}>Питання, що потребують уваги</Text>
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statNumber}>€0</Text>
