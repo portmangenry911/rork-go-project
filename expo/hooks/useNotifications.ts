@@ -95,7 +95,17 @@ export async function pushNotification(input: {
     body: input.body ?? null,
     link: input.link ?? null,
   });
-  if (error) console.log("[notifications] insert failed:", error.message);
+  if (error) {
+    console.error(
+      "[notifications] insert failed:",
+      "code:", error.code,
+      "message:", error.message,
+      "details:", error.details,
+      "hint:", error.hint,
+      "recipientUserId:", input.recipientUserId,
+      "kind:", input.kind,
+    );
+  }
 }
 
 export interface DoctorContact {
