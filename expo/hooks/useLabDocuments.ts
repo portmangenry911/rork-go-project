@@ -5,21 +5,22 @@ import { supabase } from "@/lib/supabase";
 import { usePatientHome } from "@/hooks/usePatientHome";
 import { todayISO } from "@/utils/dates";
 
-export type LabFileType = "pdf" | "image" | "manual";
+export type LabFileType = "pdf" | "image";
 
 export interface LabDocument {
   id: string;
   patient_id: string;
   therapy_cycle_id: string | null;
-  file_url: string | null;
+  file_url: string;
   file_type: LabFileType;
-  file_name: string | null;
+  file_name: string;
   lab_date: string | null;
   notes: string | null;
   created_at: string;
 }
 
-/** Patient-side: their own lab documents, upload and manual-entry mutations. */
+/** Patient-side: their own lab documents (file uploads only — structured
+ * indicator readings live in useLabIndicators.ts instead). */
 export function usePatientLabDocuments() {
   const queryClient = useQueryClient();
   const { profile, cycle, userId } = usePatientHomeWithUserId();
@@ -92,28 +93,10 @@ export function usePatientLabDocuments() {
     onSuccess: invalidate,
   });
 
-  const addManualEntry = useMutation({
-    mutationFn: async (notes: string): Promise<void> => {
-      if (patientId === null) throw new Error("Профіль пацієнта не знайдено.");
-      const { error } = await supabase.from("lab_documents").insert({
-        patient_id: patientId,
-        therapy_cycle_id: cycle?.id ?? null,
-        file_url: null,
-        file_type: "manual",
-        file_name: null,
-        lab_date: todayISO(),
-        notes: notes.trim(),
-      });
-      if (error) throw new Error(error.message);
-    },
-    onSuccess: invalidate,
-  });
-
   return {
     documents: documentsQuery.data ?? [],
     isLoading: documentsQuery.isPending,
     uploadFile,
-    addManualEntry,
   };
 }
 

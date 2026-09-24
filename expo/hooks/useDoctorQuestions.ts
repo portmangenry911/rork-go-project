@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   getDoctorUserIdForPatient,
+  isDoctorNotificationEnabled,
   pushNotification,
 } from "@/hooks/useNotifications";
 import { supabase } from "@/lib/supabase";
@@ -65,6 +66,12 @@ export function usePatientQuestions() {
         status: "new",
       });
       if (error) throw new Error(error.message);
+
+      const questionsEnabled = await isDoctorNotificationEnabled(
+        doctor.doctorProfileId,
+        "questions_enabled",
+      );
+      if (!questionsEnabled) return;
 
       const questionText = text.trim();
       const patientName =

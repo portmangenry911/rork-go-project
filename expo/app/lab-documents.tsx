@@ -2,67 +2,56 @@ import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import {
   ArrowLeft,
+  ChevronRight,
   FileText,
   FlaskConical,
   Image as ImageIcon,
-  NotebookPen,
   Upload,
 } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { cardShadow, colors, fonts, radius, softShadow } from "@/constants/theme";
+import { cardShadow, colors, fonts, radius } from "@/constants/theme";
 import {
   usePatientLabDocuments,
   type LabDocument,
   type LabFileType,
 } from "@/hooks/useLabDocuments";
+import {
+  latestByIndicator,
+  useLabIndicatorsCatalog,
+  usePatientLabIndicatorValues,
+} from "@/hooks/useLabIndicators";
 import { supabase } from "@/lib/supabase";
+import { formatDateShort } from "@/utils/dates";
 
 function iconFor(type: LabFileType): React.ReactNode {
   const size = 18;
   if (type === "image") {
     return <ImageIcon size={size} color={colors.navy} strokeWidth={2} />;
   }
-  if (type === "manual") {
-    return <NotebookPen size={size} color={colors.navy} strokeWidth={2} />;
-  }
   return <FileText size={size} color={colors.navy} strokeWidth={2} />;
-}
-
-function formatShort(iso: string | null): string {
-  if (iso === null) return "";
-  const months = [
-    "січ", "лют", "бер", "кві", "тра", "чер",
-    "лип", "серп", "вер", "жов", "лис", "гру",
-  ];
-  const d = new Date(iso);
-  return `${d.getDate()} ${months[d.getMonth()]}`;
 }
 
 export default function LabDocumentsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { documents, isLoading, uploadFile, addManualEntry } =
-    usePatientLabDocuments();
+  const { documents, isLoading, uploadFile } = usePatientLabDocuments();
+  const catalogQuery = useLabIndicatorsCatalog();
+  const { values: indicatorValues, isLoading: indicatorsLoading } =
+    usePatientLabIndicatorValues();
 
-  const [isManualOpen, setIsManualOpen] = useState<boolean>(false);
-  const [manualText, setManualText] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
   const openDocument = async (doc: LabDocument): Promise<void> => {
-    if (doc.file_url === null) return;
     const { data } = await supabase.storage
       .from("lab-documents")
       .createSignedUrl(doc.file_url, 3600);
@@ -79,104 +68,106 @@ export default function LabDocumentsScreen() {
     });
   };
 
-  const handleManualSave = (): void => {
-    if (manualText.trim().length === 0) {
-      setError("Опишіть показники.");
-      return;
-    }
-    setError(null);
-    addManualEntry.mutate(manualText.trim(), {
-      onSuccess: () => {
-        setManualText("");
-        setIsManualOpen(false);
-      },
-      onError: (err: unknown) =>
-        setError(err instanceof Error ? err.message : "Не вдалося зберегти."),
-    });
-  };
+  const latest = latestByIndicator(indicatorValues);
+  const indicators = catalogQuery.data ?? [];
+  const categories = Array.from(new Set(indicators.map((i) => i.category)));
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View style={styles.screen}>
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-          <Pressable
-            onPress={() => router.back()}
-            style={styles.iconBtn}
-            testID="lab-documents-back"
-          >
-            <ArrowLeft size={20} color={colors.ink} />
-          </Pressable>
-          <Text style={styles.title}>Аналізи</Text>
-        </View>
+    <View style={styles.screen}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.iconBtn}
+          testID="lab-documents-back"
+        >
+          <ArrowLeft size={20} color={colors.ink} />
+        </Pressable>
+        <Text style={styles.title}>Аналізи</Text>
+      </View>
 
-        <View style={styles.actionsRow}>
-          <Pressable
-            testID="upload-lab-file"
-            onPress={handleUpload}
-            disabled={uploadFile.isPending}
-            style={({ pressed }) => [
-              styles.actionButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            {uploadFile.isPending ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <>
-                <Upload size={16} color="#FFFFFF" strokeWidth={2} />
-                <Text style={styles.actionButtonText}>Завантажити файл</Text>
-              </>
-            )}
-          </Pressable>
-          <Pressable
-            testID="toggle-manual-entry"
-            onPress={() => {
-              setError(null);
-              setIsManualOpen((prev) => !prev);
-            }}
-            style={({ pressed }) => [
-              styles.actionButtonOutline,
-              pressed && styles.pressed,
-            ]}
-          >
-            <NotebookPen size={16} color={colors.navy} strokeWidth={2} />
-            <Text style={styles.actionButtonOutlineText}>Внести вручну</Text>
-          </Pressable>
-        </View>
-
-        {isManualOpen && (
-          <View style={styles.manualForm}>
-            <TextInput
-              testID="manual-entry-input"
-              style={styles.manualInput}
-              value={manualText}
-              onChangeText={setManualText}
-              placeholder="Напр.: Глюкоза — 5.4 ммоль/л, Холестерин — 4.2 ммоль/л"
-              placeholderTextColor={colors.sub}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-            <Pressable
-              testID="save-manual-entry"
-              onPress={handleManualSave}
-              disabled={addManualEntry.isPending}
-              style={({ pressed }) => [
-                styles.manualSaveButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              {addManualEntry.isPending ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.actionButtonText}>Зберегти</Text>
-              )}
-            </Pressable>
-          </View>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+        testID="lab-documents-screen"
+      >
+        <Text style={styles.sectionLabel}>ПОКАЗНИКИ</Text>
+        {indicatorsLoading || catalogQuery.isPending ? (
+          <ActivityIndicator color={colors.teal} style={styles.indicatorsLoading} />
+        ) : (
+          categories.map((category) => (
+            <View key={category} style={styles.categoryBlock}>
+              <Text style={styles.categoryTitle}>{category}</Text>
+              <View style={styles.listCard}>
+                {indicators
+                  .filter((i) => i.category === category)
+                  .map((indicator, i) => {
+                    const lastValue = latest.get(indicator.id) ?? null;
+                    return (
+                      <Pressable
+                        key={indicator.id}
+                        testID={`indicator-row-${indicator.code}`}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/lab-indicator",
+                            params: { code: indicator.code },
+                          })
+                        }
+                        style={[
+                          styles.indicatorRow,
+                          i > 0 && styles.indicatorRowBorder,
+                        ]}
+                      >
+                        <View style={styles.indicatorInfo}>
+                          <Text style={styles.indicatorLabel}>
+                            {indicator.label}
+                          </Text>
+                          {lastValue !== null && (
+                            <Text style={styles.indicatorDate}>
+                              {formatDateShort(lastValue.measured_at)}
+                            </Text>
+                          )}
+                        </View>
+                        <Text style={styles.indicatorValue}>
+                          {lastValue !== null
+                            ? `${lastValue.value} ${indicator.unit}`
+                            : "—"}
+                        </Text>
+                        <ChevronRight
+                          size={16}
+                          color={colors.sub}
+                          strokeWidth={2}
+                        />
+                      </Pressable>
+                    );
+                  })}
+              </View>
+            </View>
+          ))
         )}
+
+        <Text style={styles.sectionLabel}>ФАЙЛИ</Text>
+        <Pressable
+          testID="upload-lab-file"
+          onPress={handleUpload}
+          disabled={uploadFile.isPending}
+          style={({ pressed }) => [
+            styles.actionButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          {uploadFile.isPending ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <Upload size={16} color="#FFFFFF" strokeWidth={2} />
+              <Text style={styles.actionButtonText}>Завантажити PDF/фото</Text>
+            </>
+          )}
+        </Pressable>
 
         {error !== null && (
           <Text style={styles.error} testID="lab-documents-error">
@@ -185,68 +176,38 @@ export default function LabDocumentsScreen() {
         )}
 
         {isLoading ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={colors.teal} />
-          </View>
+          <ActivityIndicator color={colors.teal} style={styles.indicatorsLoading} />
         ) : documents.length === 0 ? (
-          <View style={styles.center}>
+          <View style={styles.emptyWrap}>
             <View style={styles.emptyIcon}>
-              <FlaskConical size={26} color={colors.teal} strokeWidth={1.6} />
+              <FlaskConical size={22} color={colors.teal} strokeWidth={1.6} />
             </View>
-            <Text style={styles.emptyTitle}>Аналізів ще немає</Text>
-            <Text style={styles.emptyText}>
-              Завантажте файл або внесіть показники вручну — лікар побачить
-              їх тут.
-            </Text>
+            <Text style={styles.emptyText}>Файлів ще немає</Text>
           </View>
         ) : (
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={[
-              styles.content,
-              { paddingBottom: insets.bottom + 24 },
-            ]}
-            showsVerticalScrollIndicator={false}
-            testID="lab-documents-list"
-          >
-            {documents.map((doc) => (
-              <Pressable
-                key={doc.id}
-                testID={`lab-document-${doc.id}`}
-                onPress={() => openDocument(doc)}
-                disabled={doc.file_url === null}
-                style={({ pressed }) => [
-                  styles.card,
-                  pressed && doc.file_url !== null && styles.pressed,
-                ]}
-              >
-                <View style={styles.cardIcon}>{iconFor(doc.file_type)}</View>
-                <View style={styles.cardBody}>
-                  <Text style={styles.cardTitle}>
-                    {doc.file_type === "manual"
-                      ? "Ручний запис"
-                      : doc.file_name ?? "Файл"}
-                  </Text>
-                  {doc.notes !== null && doc.notes.length > 0 && (
-                    <Text style={styles.cardNotes} numberOfLines={2}>
-                      {doc.notes}
-                    </Text>
-                  )}
-                  <Text style={styles.cardDate}>
-                    {formatShort(doc.lab_date ?? doc.created_at)}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-          </ScrollView>
+          documents.map((doc) => (
+            <Pressable
+              key={doc.id}
+              testID={`lab-document-${doc.id}`}
+              onPress={() => openDocument(doc)}
+              style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+            >
+              <View style={styles.cardIcon}>{iconFor(doc.file_type)}</View>
+              <View style={styles.cardBody}>
+                <Text style={styles.cardTitle}>{doc.file_name}</Text>
+                <Text style={styles.cardDate}>
+                  {formatDateShort(doc.lab_date ?? doc.created_at)}
+                </Text>
+              </View>
+            </Pressable>
+          ))
         )}
-      </View>
-    </KeyboardAvoidingView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.paper },
   screen: { flex: 1, backgroundColor: colors.paper },
   header: {
     flexDirection: "row",
@@ -264,14 +225,62 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: { flex: 1, fontFamily: fonts.serif, fontSize: 22, color: colors.ink },
-  actionsRow: {
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 20 },
+  sectionLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1,
+    color: colors.sub,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  indicatorsLoading: {
+    marginBottom: 14,
+  },
+  categoryBlock: {
+    marginBottom: 14,
+  },
+  categoryTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.navy,
+    marginBottom: 6,
+  },
+  listCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    paddingHorizontal: 16,
+    ...cardShadow,
+  },
+  indicatorRow: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 10,
-    paddingHorizontal: 20,
-    marginBottom: 12,
+    paddingVertical: 13,
+  },
+  indicatorRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: colors.hairline,
+  },
+  indicatorInfo: { flex: 1 },
+  indicatorLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 14.5,
+    color: colors.ink,
+  },
+  indicatorDate: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: colors.sub,
+    marginTop: 2,
+  },
+  indicatorValue: {
+    fontFamily: fonts.serif,
+    fontSize: 16,
+    color: colors.navyDeep,
   },
   actionButton: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -279,64 +288,19 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: radius.button,
     backgroundColor: colors.navy,
+    marginBottom: 12,
   },
   actionButtonText: {
     fontFamily: fonts.bold,
     fontSize: 13.5,
     color: "#FFFFFF",
   },
-  actionButtonOutline: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    height: 46,
-    borderRadius: radius.button,
-    backgroundColor: colors.card,
-    borderWidth: 1.2,
-    borderColor: colors.navy,
-  },
-  actionButtonOutlineText: {
-    fontFamily: fonts.bold,
-    fontSize: 13.5,
-    color: colors.navy,
-  },
-  manualForm: {
-    marginHorizontal: 20,
-    marginBottom: 12,
-    backgroundColor: colors.card,
-    borderRadius: radius.card,
-    padding: 14,
-    ...cardShadow,
-  },
-  manualInput: {
-    minHeight: 70,
-    borderRadius: radius.button,
-    backgroundColor: colors.paper,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    fontFamily: fonts.medium,
-    fontSize: 14.5,
-    color: colors.ink,
-  },
-  manualSaveButton: {
-    height: 42,
-    borderRadius: radius.button,
-    backgroundColor: colors.teal,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 10,
-  },
   error: {
     fontFamily: fonts.medium,
     fontSize: 13,
     color: colors.amber,
-    paddingHorizontal: 20,
     marginBottom: 8,
   },
-  scroll: { flex: 1 },
-  content: { paddingHorizontal: 20 },
   card: {
     flexDirection: "row",
     alignItems: "center",
@@ -361,41 +325,30 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     color: colors.ink,
   },
-  cardNotes: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.sub,
-    marginTop: 2,
-  },
   cardDate: {
     fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.sub,
     marginTop: 3,
   },
-  center: {
-    flex: 1,
+  emptyWrap: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 40,
+    gap: 10,
+    paddingVertical: 8,
   },
   emptyIcon: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.mint,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
   },
-  emptyTitle: { fontFamily: fonts.serif, fontSize: 19, color: colors.ink },
   emptyText: {
     fontFamily: fonts.regular,
     fontSize: 13.5,
-    lineHeight: 20,
     color: colors.sub,
-    textAlign: "center",
-    marginTop: 7,
   },
   pressed: { opacity: 0.85 },
 });

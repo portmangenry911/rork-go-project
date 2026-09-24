@@ -13,7 +13,6 @@ import {
   FileText,
   Image as ImageIcon,
   Images,
-  NotebookPen,
   SlidersHorizontal,
   MessageCircle,
   X,
@@ -49,6 +48,11 @@ import {
   type QuestionStatus,
 } from "@/hooks/useDoctorQuestions";
 import { useLabDocumentsForPatient } from "@/hooks/useLabDocuments";
+import {
+  latestByIndicator,
+  useLabIndicatorValuesForPatient,
+  useLabIndicatorsCatalog,
+} from "@/hooks/useLabIndicators";
 import { supabase } from "@/lib/supabase";
 import type {
   DailyCheckin,
@@ -231,6 +235,13 @@ export default function PatientDetailScreen() {
     typeof id === "string" ? id : null,
   );
   const labDocuments = labDocumentsQuery.data ?? [];
+  const labIndicatorsCatalog = useLabIndicatorsCatalog().data ?? [];
+  const labIndicatorValuesQuery = useLabIndicatorValuesForPatient(
+    typeof id === "string" ? id : null,
+  );
+  const labIndicatorLatest = latestByIndicator(
+    labIndicatorValuesQuery.data ?? [],
+  );
 
   console.log(
     "[patient-detail] id param:",
@@ -760,19 +771,55 @@ export default function PatientDetailScreen() {
               </>
             )}
 
+            <Text style={styles.sectionLabel}>ПОКАЗНИКИ</Text>
+            <View style={styles.listCard} testID="patient-lab-indicators-list">
+              {labIndicatorsCatalog.map((indicator, i) => {
+                const lastValue = labIndicatorLatest.get(indicator.id) ?? null;
+                return (
+                  <Pressable
+                    key={indicator.id}
+                    testID={`doctor-indicator-row-${indicator.code}`}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/lab-indicator",
+                        params: { code: indicator.code, patientId: id as string },
+                      })
+                    }
+                    style={[
+                      styles.indicatorRow,
+                      i > 0 && styles.feedRowBorder,
+                    ]}
+                  >
+                    <View style={styles.indicatorInfo}>
+                      <Text style={styles.indicatorLabel}>
+                        {indicator.label}
+                      </Text>
+                      {lastValue !== null && (
+                        <Text style={styles.indicatorDate}>
+                          {formatDateShort(lastValue.measured_at)}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.indicatorValue}>
+                      {lastValue !== null
+                        ? `${lastValue.value} ${indicator.unit}`
+                        : "—"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
             {labDocuments.length > 0 && (
               <>
-                <Text style={styles.sectionLabel}>АНАЛІЗИ</Text>
+                <Text style={styles.sectionLabel}>ФАЙЛИ АНАЛІЗІВ</Text>
                 <View style={styles.listCard} testID="patient-lab-documents-list">
                   {labDocuments.map((doc, i) => (
                     <Pressable
                       key={doc.id}
                       testID={`lab-document-row-${doc.id}`}
-                      disabled={doc.file_url === null}
                       onPress={() => {
-                        if (doc.file_url !== null) {
-                          void WebBrowser.openBrowserAsync(doc.file_url);
-                        }
+                        void WebBrowser.openBrowserAsync(doc.file_url);
                       }}
                       style={[
                         styles.labDocRow,
@@ -782,23 +829,12 @@ export default function PatientDetailScreen() {
                       <View style={styles.labDocIcon}>
                         {doc.file_type === "image" ? (
                           <ImageIcon size={17} color={colors.navy} strokeWidth={2} />
-                        ) : doc.file_type === "manual" ? (
-                          <NotebookPen size={17} color={colors.navy} strokeWidth={2} />
                         ) : (
                           <FileText size={17} color={colors.navy} strokeWidth={2} />
                         )}
                       </View>
                       <View style={styles.labDocBody}>
-                        <Text style={styles.labDocTitle}>
-                          {doc.file_type === "manual"
-                            ? "Ручний запис"
-                            : doc.file_name ?? "Файл"}
-                        </Text>
-                        {doc.notes !== null && doc.notes.length > 0 && (
-                          <Text style={styles.labDocNotes} numberOfLines={2}>
-                            {doc.notes}
-                          </Text>
-                        )}
+                        <Text style={styles.labDocTitle}>{doc.file_name}</Text>
                         <Text style={styles.labDocDate}>
                           {formatDateShort(doc.lab_date ?? doc.created_at)}
                         </Text>
@@ -1205,6 +1241,29 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     color: colors.sub,
     marginTop: 3,
+  },
+  indicatorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 13,
+  },
+  indicatorInfo: { flex: 1 },
+  indicatorLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  indicatorDate: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    color: colors.sub,
+    marginTop: 2,
+  },
+  indicatorValue: {
+    fontFamily: fonts.serif,
+    fontSize: 15,
+    color: colors.navyDeep,
   },
   labDocRow: {
     flexDirection: "row",

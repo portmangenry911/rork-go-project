@@ -127,7 +127,8 @@ export async function getDoctorUserIdForPatient(
 export type DoctorNotificationSetting =
   | "checkins_enabled"
   | "messages_enabled"
-  | "alerts_enabled";
+  | "alerts_enabled"
+  | "questions_enabled";
 
 /**
  * True when the doctor has this notification category enabled. Missing

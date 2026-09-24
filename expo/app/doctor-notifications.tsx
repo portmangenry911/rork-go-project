@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { ArrowLeft, BellRing } from "lucide-react-native";
+import { ArrowLeft, BellRing, HelpCircle } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,12 +21,14 @@ interface DoctorNotificationSettings {
   checkins_enabled: boolean;
   messages_enabled: boolean;
   alerts_enabled: boolean;
+  questions_enabled: boolean;
 }
 
 const DEFAULT_SETTINGS: DoctorNotificationSettings = {
   checkins_enabled: true,
   messages_enabled: true,
   alerts_enabled: true,
+  questions_enabled: true,
 };
 
 export default function DoctorNotificationsScreen() {
@@ -60,7 +62,9 @@ export default function DoctorNotificationsScreen() {
     queryFn: async (): Promise<DoctorNotificationSettings | null> => {
       const { data, error: qError } = await supabase
         .from("doctor_notification_settings")
-        .select("checkins_enabled, messages_enabled, alerts_enabled")
+        .select(
+          "checkins_enabled, messages_enabled, alerts_enabled, questions_enabled",
+        )
         .eq("doctor_id", doctorId as string)
         .maybeSingle();
       if (qError) throw qError;
@@ -189,6 +193,24 @@ export default function DoctorNotificationsScreen() {
                 onValueChange={(v) => toggle({ alerts_enabled: v })}
                 trackColor={{ false: colors.hairline, true: colors.teal }}
                 testID="alerts-switch"
+              />
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.row}>
+              <View style={styles.rowIcon}>
+                <HelpCircle size={18} color={colors.tealDeep} strokeWidth={2} />
+              </View>
+              <View style={styles.rowText}>
+                <Text style={styles.rowTitle}>Питання від пацієнтів</Text>
+                <Text style={styles.rowSub}>Нові питання лікарю</Text>
+              </View>
+              <Switch
+                value={settings.questions_enabled}
+                onValueChange={(v) => toggle({ questions_enabled: v })}
+                trackColor={{ false: colors.hairline, true: colors.teal }}
+                testID="questions-switch"
               />
             </View>
           </View>
