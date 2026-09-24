@@ -8,7 +8,7 @@ import {
   Image as ImageIcon,
   Upload,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -44,6 +44,10 @@ function iconFor(type: LabFileType): React.ReactNode {
 export default function LabDocumentsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const renderCount = useRef(0);
+  renderCount.current += 1;
+  console.log("[lab-documents] render #", renderCount.current);
+
   const { documents, isLoading, uploadFile } = usePatientLabDocuments();
   const catalogQuery = useLabIndicatorsCatalog();
   const { values: indicatorValues, isLoading: indicatorsLoading } =
