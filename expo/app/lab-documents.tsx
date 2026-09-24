@@ -1,4 +1,4 @@
-import { useNavigation, useRouter } from "expo-router";
+import { useIsFocused, useNavigation, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import {
   ArrowLeft,
@@ -53,6 +53,7 @@ function iconFor(type: LabFileType): React.ReactNode {
 export default function LabDocumentsScreen() {
   const router = useRouter();
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { documents, isLoading, uploadFile } = usePatientLabDocuments();
   const catalogQuery = useLabIndicatorsCatalog();
@@ -104,10 +105,14 @@ export default function LabDocumentsScreen() {
   // Web only: the browser's own back/forward button changes the URL via
   // popstate, which beforeRemove above never sees (it only knows about
   // in-app navigation). Arm a decoy history entry while there are drafts
-  // so the first back press lands us back here instead of silently
-  // leaving, and show the same confirm dialog.
+  // AND this screen is the focused one — so navigating between an
+  // indicator's detail screen and this list (both part of the same flow)
+  // never triggers it, only actually leaving the flow does. Gating on
+  // focus also keeps the decoy's URL correct: it must be pushed while
+  // lab-documents itself is the current history entry, not whatever
+  // screen happened to be on top when a draft was made.
   useEffect(() => {
-    if (Platform.OS !== "web" || !hasDrafts) return;
+    if (Platform.OS !== "web" || !hasDrafts || !isFocused) return;
     if (typeof window === "undefined") return;
 
     window.history.pushState({ labDraftGuard: true }, "", window.location.href);
@@ -133,7 +138,7 @@ export default function LabDocumentsScreen() {
 
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [hasDrafts]);
+  }, [hasDrafts, isFocused]);
 
   // Web only: tab close / refresh / typed URL — the browser's own
   // "leave site?" dialog. Its text can't be customized in modern
