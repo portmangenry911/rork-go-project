@@ -94,6 +94,60 @@ export default function LabDocumentsScreen() {
         showsVerticalScrollIndicator={false}
         testID="lab-documents-screen"
       >
+        <Text style={styles.sectionLabel}>ФАЙЛИ</Text>
+        <Pressable
+          testID="upload-lab-file"
+          onPress={handleUpload}
+          disabled={uploadFile.isPending}
+          style={({ pressed }) => [
+            styles.actionButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          {uploadFile.isPending ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <Upload size={16} color="#FFFFFF" strokeWidth={2} />
+              <Text style={styles.actionButtonText}>Завантажити PDF/фото</Text>
+            </>
+          )}
+        </Pressable>
+
+        {error !== null && (
+          <Text style={styles.error} testID="lab-documents-error">
+            {error}
+          </Text>
+        )}
+
+        {isLoading ? (
+          <ActivityIndicator color={colors.teal} style={styles.indicatorsLoading} />
+        ) : documents.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <View style={styles.emptyIcon}>
+              <FlaskConical size={22} color={colors.teal} strokeWidth={1.6} />
+            </View>
+            <Text style={styles.emptyText}>Файлів ще немає</Text>
+          </View>
+        ) : (
+          documents.map((doc) => (
+            <Pressable
+              key={doc.id}
+              testID={`lab-document-${doc.id}`}
+              onPress={() => openDocument(doc)}
+              style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+            >
+              <View style={styles.cardIcon}>{iconFor(doc.file_type)}</View>
+              <View style={styles.cardBody}>
+                <Text style={styles.cardTitle}>{doc.file_name}</Text>
+                <Text style={styles.cardDate}>
+                  {formatDateShort(doc.lab_date ?? doc.created_at)}
+                </Text>
+              </View>
+            </Pressable>
+          ))
+        )}
+
         <Text style={styles.sectionLabel}>ПОКАЗНИКИ</Text>
         {indicatorsLoading || catalogQuery.isPending ? (
           <ActivityIndicator color={colors.teal} style={styles.indicatorsLoading} />
@@ -146,60 +200,6 @@ export default function LabDocumentsScreen() {
                   })}
               </View>
             </View>
-          ))
-        )}
-
-        <Text style={styles.sectionLabel}>ФАЙЛИ</Text>
-        <Pressable
-          testID="upload-lab-file"
-          onPress={handleUpload}
-          disabled={uploadFile.isPending}
-          style={({ pressed }) => [
-            styles.actionButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          {uploadFile.isPending ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <>
-              <Upload size={16} color="#FFFFFF" strokeWidth={2} />
-              <Text style={styles.actionButtonText}>Завантажити PDF/фото</Text>
-            </>
-          )}
-        </Pressable>
-
-        {error !== null && (
-          <Text style={styles.error} testID="lab-documents-error">
-            {error}
-          </Text>
-        )}
-
-        {isLoading ? (
-          <ActivityIndicator color={colors.teal} style={styles.indicatorsLoading} />
-        ) : documents.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <View style={styles.emptyIcon}>
-              <FlaskConical size={22} color={colors.teal} strokeWidth={1.6} />
-            </View>
-            <Text style={styles.emptyText}>Файлів ще немає</Text>
-          </View>
-        ) : (
-          documents.map((doc) => (
-            <Pressable
-              key={doc.id}
-              testID={`lab-document-${doc.id}`}
-              onPress={() => openDocument(doc)}
-              style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-            >
-              <View style={styles.cardIcon}>{iconFor(doc.file_type)}</View>
-              <View style={styles.cardBody}>
-                <Text style={styles.cardTitle}>{doc.file_name}</Text>
-                <Text style={styles.cardDate}>
-                  {formatDateShort(doc.lab_date ?? doc.created_at)}
-                </Text>
-              </View>
-            </Pressable>
           ))
         )}
       </ScrollView>
